@@ -1,0 +1,6 @@
+.build/
+build-dev/
+build-release/
+*.dmg
+.DS_Store
+.swiftpm/
