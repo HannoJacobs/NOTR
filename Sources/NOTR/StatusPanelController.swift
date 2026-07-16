@@ -13,8 +13,7 @@ final class StatusPanelController: NSObject, NSWindowDelegate {
     private var panel: KeyablePanel?
     private var hostingController: NSHostingController<AnyView>?
 
-    private var globalMonitor: Any?
-    private var localMonitor: Any?
+    private var resignActiveObserver: NSObjectProtocol?
 
     private var anchorTopY: CGFloat = 0
     private var anchorCenterX: CGFloat = 0
@@ -82,14 +81,14 @@ final class StatusPanelController: NSObject, NSWindowDelegate {
         NSApp.activate(ignoringOtherApps: true)
         panel.makeKeyAndOrderFront(nil)
         isPresented = true
-        installMonitors()
+        installDismissObserver()
         Log.info("panel shown size=\(panel.frame.size) origin=\(panel.frame.origin)", "controller")
     }
 
     func hide() {
         guard isPresented else { return }
         appState.flushPendingSaveIfNeeded()
-        removeMonitors()
+        removeDismissObserver()
         panel?.orderOut(nil)
         isPresented = false
         Log.info("panel hidden", "controller")
@@ -138,29 +137,28 @@ final class StatusPanelController: NSObject, NSWindowDelegate {
         pinToAnchor()
     }
 
-    private func installMonitors() {
-        removeMonitors()
-        globalMonitor = NSEvent.addGlobalMonitorForEvents(
-            matching: [.leftMouseDown, .rightMouseDown]
+    // Close on app deactivation (user clicked another app) instead of on any global
+    // mouse-down. The macOS emoji/character viewer is a non-activating panel, so
+    // clicking an emoji keeps NOTR active and the panel stays open; a mouse-down
+    // monitor would have wrongly dismissed it. Clicking the status item keeps the
+    // app active too, so toggling still works.
+    private func installDismissObserver() {
+        removeDismissObserver()
+        resignActiveObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didResignActiveNotification,
+            object: nil,
+            queue: .main
         ) { [weak self] _ in
+            Log.info("app resigned active; dismissing panel", "controller")
             self?.hide()
-        }
-        localMonitor = NSEvent.addLocalMonitorForEvents(
-            matching: [.leftMouseDown, .rightMouseDown]
-        ) { [weak self] event in
-            guard let self else { return event }
-            if event.window == self.panel { return event }
-            if event.window == self.statusItem?.button?.window { return event }
-            self.hide()
-            return event
         }
     }
 
-    private func removeMonitors() {
-        if let globalMonitor { NSEvent.removeMonitor(globalMonitor) }
-        if let localMonitor { NSEvent.removeMonitor(localMonitor) }
-        globalMonitor = nil
-        localMonitor = nil
+    private func removeDismissObserver() {
+        if let resignActiveObserver {
+            NotificationCenter.default.removeObserver(resignActiveObserver)
+        }
+        resignActiveObserver = nil
     }
 
     private func buildPanel() {
