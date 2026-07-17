@@ -14,6 +14,7 @@ final class StatusPanelController: NSObject, NSWindowDelegate {
     private var hostingController: NSHostingController<AnyView>?
 
     private var resignActiveObserver: NSObjectProtocol?
+    private var globalClickMonitor: Any?
 
     private var anchorTopY: CGFloat = 0
     private var anchorCenterX: CGFloat = 0
@@ -137,11 +138,16 @@ final class StatusPanelController: NSObject, NSWindowDelegate {
         pinToAnchor()
     }
 
-    // Close on app deactivation (user clicked another app) instead of on any global
-    // mouse-down. The macOS emoji/character viewer is a non-activating panel, so
-    // clicking an emoji keeps NOTR active and the panel stays open; a mouse-down
-    // monitor would have wrongly dismissed it. Clicking the status item keeps the
-    // app active too, so toggling still works.
+    // Dismiss rules:
+    //  1. App deactivation (clicked another app/window): didResignActiveNotification.
+    //     The macOS emoji/character viewer is a NON-activating panel, so clicking an
+    //     emoji keeps NOTR active and the panel stays open. (A plain global mouse-down
+    //     monitor that closed on any outside click would wrongly swallow that emoji click.)
+    //  2. Clicking ANOTHER menu-bar item: no resign-active fires for that (the other item
+    //     just opens a tracking menu), so NOTR would otherwise linger underneath it. The
+    //     global mouse-down monitor closes NOTR for those clicks, but ONLY when the click
+    //     lands in the menu-bar strip — never for the emoji viewer, which floats below it.
+    // Clicking our own status item keeps the app active and is handled by the toggle action.
     private func installDismissObserver() {
         removeDismissObserver()
         resignActiveObserver = NotificationCenter.default.addObserver(
@@ -152,6 +158,12 @@ final class StatusPanelController: NSObject, NSWindowDelegate {
             Log.info("app resigned active; dismissing panel", "controller")
             self?.hide()
         }
+        // Global only: local monitors race with in-panel clicks.
+        globalClickMonitor = NSEvent.addGlobalMonitorForEvents(
+            matching: [.leftMouseDown, .rightMouseDown]
+        ) { [weak self] _ in
+            self?.dismissIfMenuBarClick()
+        }
     }
 
     private func removeDismissObserver() {
@@ -159,6 +171,41 @@ final class StatusPanelController: NSObject, NSWindowDelegate {
             NotificationCenter.default.removeObserver(resignActiveObserver)
         }
         resignActiveObserver = nil
+        if let globalClickMonitor {
+            NSEvent.removeMonitor(globalClickMonitor)
+        }
+        globalClickMonitor = nil
+    }
+
+    /// Close when the user clicks a DIFFERENT menu-bar item, so it doesn't open underneath
+    /// NOTR. Deliberately ignores non-menu-bar outside clicks so the emoji/character viewer
+    /// (a non-activating panel below the menu bar) keeps working.
+    private func dismissIfMenuBarClick() {
+        guard isPresented, let panel else { return }
+        let point = NSEvent.mouseLocation
+
+        if panel.frame.contains(point) { return }
+
+        if let button = statusItem?.button, let buttonWindow = button.window {
+            let buttonRect = button.convert(button.bounds, to: nil)
+            let screenRect = buttonWindow.convertToScreen(buttonRect).insetBy(dx: -4, dy: -4)
+            if screenRect.contains(point) { return }
+        }
+
+        if pointIsInMenuBar(point) {
+            Log.info("menu-bar click outside NOTR; dismissing panel", "controller")
+            hide()
+        }
+    }
+
+    private func pointIsInMenuBar(_ point: NSPoint) -> Bool {
+        let screen = NSScreen.screens.first { $0.frame.contains(point) }
+            ?? statusItem?.button?.window?.screen
+            ?? NSScreen.main
+        guard let screen else { return false }
+        let menuBarHeight = screen.frame.maxY - screen.visibleFrame.maxY
+        let effectiveHeight = max(menuBarHeight, NSStatusBar.system.thickness)
+        return point.y >= screen.frame.maxY - effectiveHeight
     }
 
     private func buildPanel() {

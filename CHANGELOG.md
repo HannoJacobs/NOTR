@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3
+
+- Fix the bug where clicking a different menu-bar icon while the NOTR panel was open left NOTR lingering on top, so the other item's menu opened underneath it instead of NOTR closing first.
+- Root cause: after `0.2` moved dismissal onto `NSApplication.didResignActiveNotification` (to keep the emoji picker working), clicking another menu-bar item never deactivates NOTR — the other item just opens a transient tracking menu — so no dismiss ever fired for that interaction.
+- Add a global mouse-down monitor that closes NOTR when a click lands in the menu-bar strip, so clicking any other menu-bar icon now dismisses NOTR immediately and the other menu opens cleanly on top, matching SOURCR's open/close feel.
+- Deliberately scope the monitor to menu-bar-strip clicks only, so the macOS Emoji & Symbols (Character Viewer) picker — a non-activating panel that floats below the menu bar — is never treated as a dismiss trigger; the `0.2` emoji-insert fix stays intact.
+- Keep the `NSApplication.didResignActiveNotification` observer for genuine app switches (Finder, editor, browser), so switching to another application still dismisses the panel exactly as before.
+- Ignore clicks on NOTR's own status item inside the monitor so the icon still toggles the panel open and closed instead of double-dismissing, and ignore in-panel clicks so editing and reordering are unaffected.
+- Compute the menu-bar strip from the clicked screen's `frame`/`visibleFrame` inset (falling back to `NSStatusBar.system.thickness`) so the detection works across multiple displays and notch/no-notch layouts.
+- Add diagnostic logging (`menu-bar click outside NOTR; dismissing panel`) for the new dismissal path so future dismiss regressions remain traceable from the session log under Application Support.
+- Bump the shipped build to `0.3` and publish it as the live GitHub release asset through the same ad-hoc DMG packaging and install-verification pipeline used for `0.1` and `0.2`.
+
 ## 0.2
 
 - Fix the bug where clicking an emoji in the macOS Emoji & Symbols (Character Viewer) picker while editing a note would instantly dismiss the NOTR panel, discarding the interaction before the glyph could be inserted.
