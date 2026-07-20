@@ -66,6 +66,8 @@ struct MenuBarView: View {
 
             Spacer(minLength: 8)
 
+            pinToggleButton
+
             Button {
                 appState.reloadSelectedContent()
             } label: {
@@ -79,6 +81,19 @@ struct MenuBarView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
+    }
+
+    private var pinToggleButton: some View {
+        Button {
+            appState.togglePanelPinned()
+        } label: {
+            Image(systemName: appState.isPanelPinned ? "pin.fill" : "pin")
+                .font(.system(size: 12, weight: .medium))
+                .frame(width: 28, height: 28)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(NotrIconButtonStyle(isActive: appState.isPanelPinned))
+        .help(appState.isPanelPinned ? "Unpin panel (auto-closes when you click away)" : "Pin panel (stay open while working elsewhere)")
     }
 
     private var settingsPanel: some View {
@@ -354,6 +369,8 @@ struct MenuBarView: View {
 
     private var footer: some View {
         HStack(spacing: 6) {
+            pinToggleButton
+
             Button {
                 showingSettings = true
             } label: {

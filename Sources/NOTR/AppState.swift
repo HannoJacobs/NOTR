@@ -8,6 +8,7 @@ final class AppState {
     private static let pinsKey = "notr.pinnedNotes"
     private static let lastSelectedKey = "notr.lastSelectedNoteID"
     private static let lineWrapKey = "notr.lineWrapEnabled"
+    private static let panelPinnedKey = "notr.panelPinned"
 
     var pinnedNotes: [PinnedNote] = [] {
         didSet { persistPins() }
@@ -29,6 +30,18 @@ final class AppState {
         }
     }
 
+    /// When true, the panel stays open while working in other apps (no auto-dismiss).
+    var isPanelPinned: Bool {
+        didSet {
+            UserDefaults.standard.set(isPanelPinned, forKey: Self.panelPinnedKey)
+            Log.info("panel pin \(isPanelPinned ? "on" : "off")", "appState")
+            onPanelPinnedChanged?(isPanelPinned)
+        }
+    }
+
+    /// Hook for StatusPanelController to react when pin toggles (e.g. unpin while inactive → hide).
+    var onPanelPinnedChanged: ((Bool) -> Void)?
+
     var fileContent: String = ""
     var loadError: String?
     var isLoadingContent = false
@@ -47,6 +60,7 @@ final class AppState {
         } else {
             lineWrapEnabled = UserDefaults.standard.bool(forKey: Self.lineWrapKey)
         }
+        isPanelPinned = UserDefaults.standard.bool(forKey: Self.panelPinnedKey)
 
         loadPins()
         pruneMissingNotes()
@@ -56,6 +70,10 @@ final class AppState {
             selectedNoteID = id
             loadSelectedContent(restartWatcher: true)
         }
+    }
+
+    func togglePanelPinned() {
+        isPanelPinned.toggle()
     }
 
     var selectedNote: PinnedNote? {

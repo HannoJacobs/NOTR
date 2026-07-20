@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.4
+
+- Add a pin / keep-on-top toggle so NOTR can stay hovering while you work in another app — useful when reading a note and typing or browsing "behind" it without the panel auto-closing.
+- The pin control lives in the note header (next to reload) and in the pin-list footer, so it is available both while viewing a note and from the list overview; it is an overall app setting, not per-note.
+- When pinned, the panel skips both auto-dismiss paths (app-deactivation and menu-bar-strip clicks), drops to a floating window level so it stays above document windows, and remains visible after you click into Finder, an editor, a browser, or another app.
+- When unpinned, normal menu-bar dismissal returns immediately (hybrid resign-active + menu-bar-strip monitor from `0.3`); if you unpin after already switching away, the panel hides right away instead of lingering.
+- Explicit close still works while pinned: clicking the menu-bar status item toggles the panel closed. Pin state is persisted in UserDefaults and survives hide/show and relaunches until you unpin.
+- Active pin state is visually obvious — filled `pin.fill` glyph plus an accent-tinted button background — matching the existing press/feedback rule for every clickable control.
+- Keep the emoji/Character Viewer behavior from `0.2`/`0.3` intact: pinning only disables auto-dismiss; it does not reintroduce a blanket outside-click monitor that would swallow emoji clicks.
+- Add diagnostic logging for pin on/off and for "staying open (pinned)" on resign-active so sticky-mode regressions are easy to trace from the Application Support session log.
+- Bump the shipped build to `0.4` and publish it as the live GitHub release asset through the same ad-hoc DMG packaging and install-verification pipeline used for prior releases.
+
 ## 0.3
 
 - Fix the bug where clicking a different menu-bar icon while the NOTR panel was open left NOTR lingering on top, so the other item's menu opened underneath it instead of NOTR closing first.

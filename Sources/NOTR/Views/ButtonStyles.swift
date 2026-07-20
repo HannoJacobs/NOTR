@@ -1,11 +1,18 @@
 import SwiftUI
 
 struct NotrIconButtonStyle: ButtonStyle {
+    var isActive: Bool = false
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
+            .foregroundStyle(isActive ? Color.accentColor : Color.primary)
             .background(
                 RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(configuration.isPressed ? Color.primary.opacity(0.14) : Color.clear)
+                    .fill(
+                        configuration.isPressed
+                            ? Color.primary.opacity(0.14)
+                            : (isActive ? Color.accentColor.opacity(0.16) : Color.clear)
+                    )
             )
             .scaleEffect(configuration.isPressed ? 0.92 : 1)
             .animation(.easeOut(duration: 0.08), value: configuration.isPressed)

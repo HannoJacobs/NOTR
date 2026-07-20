@@ -26,6 +26,9 @@ final class StatusPanelController: NSObject, NSWindowDelegate {
     init(appState: AppState) {
         self.appState = appState
         super.init()
+        appState.onPanelPinnedChanged = { [weak self] pinned in
+            self?.handlePinChanged(pinned)
+        }
     }
 
     func install() {
@@ -79,11 +82,15 @@ final class StatusPanelController: NSObject, NSWindowDelegate {
         syncContentSize()
         pinToAnchor()
         panel.alphaValue = 1
+        panel.level = appState.isPanelPinned ? .floating : .popUpMenu
         NSApp.activate(ignoringOtherApps: true)
         panel.makeKeyAndOrderFront(nil)
         isPresented = true
         installDismissObserver()
-        Log.info("panel shown size=\(panel.frame.size) origin=\(panel.frame.origin)", "controller")
+        Log.info(
+            "panel shown size=\(panel.frame.size) origin=\(panel.frame.origin) pinned=\(appState.isPanelPinned)",
+            "controller"
+        )
     }
 
     func hide() {
@@ -138,7 +145,7 @@ final class StatusPanelController: NSObject, NSWindowDelegate {
         pinToAnchor()
     }
 
-    // Dismiss rules:
+    // Dismiss rules (when NOT pinned):
     //  1. App deactivation (clicked another app/window): didResignActiveNotification.
     //     The macOS emoji/character viewer is a NON-activating panel, so clicking an
     //     emoji keeps NOTR active and the panel stays open. (A plain global mouse-down
@@ -147,6 +154,8 @@ final class StatusPanelController: NSObject, NSWindowDelegate {
     //     just opens a tracking menu), so NOTR would otherwise linger underneath it. The
     //     global mouse-down monitor closes NOTR for those clicks, but ONLY when the click
     //     lands in the menu-bar strip — never for the emoji viewer, which floats below it.
+    // When pinned (isPanelPinned): skip both auto-dismiss paths so the panel stays hovering
+    // while the user works in other apps. Explicit hide via status-item toggle still works.
     // Clicking our own status item keeps the app active and is handled by the toggle action.
     private func installDismissObserver() {
         removeDismissObserver()
@@ -155,8 +164,13 @@ final class StatusPanelController: NSObject, NSWindowDelegate {
             object: nil,
             queue: .main
         ) { [weak self] _ in
+            guard let self else { return }
+            if self.appState.isPanelPinned {
+                Log.info("app resigned active; staying open (pinned)", "controller")
+                return
+            }
             Log.info("app resigned active; dismissing panel", "controller")
-            self?.hide()
+            self.hide()
         }
         // Global only: local monitors race with in-panel clicks.
         globalClickMonitor = NSEvent.addGlobalMonitorForEvents(
@@ -177,11 +191,30 @@ final class StatusPanelController: NSObject, NSWindowDelegate {
         globalClickMonitor = nil
     }
 
+    private func handlePinChanged(_ pinned: Bool) {
+        guard isPresented else { return }
+        if pinned {
+            // Keep floating above other apps while the user works elsewhere.
+            panel?.level = .floating
+            panel?.orderFrontRegardless()
+            Log.info("panel pinned; auto-dismiss disabled", "controller")
+        } else {
+            panel?.level = .popUpMenu
+            Log.info("panel unpinned; auto-dismiss re-enabled", "controller")
+            // If they unpinned after switching away, close like a normal menu-bar item.
+            if NSApp.isActive == false {
+                hide()
+            }
+        }
+    }
+
     /// Close when the user clicks a DIFFERENT menu-bar item, so it doesn't open underneath
     /// NOTR. Deliberately ignores non-menu-bar outside clicks so the emoji/character viewer
     /// (a non-activating panel below the menu bar) keeps working.
     private func dismissIfMenuBarClick() {
         guard isPresented, let panel else { return }
+        if appState.isPanelPinned { return }
+
         let point = NSEvent.mouseLocation
 
         if panel.frame.contains(point) { return }
@@ -240,7 +273,7 @@ final class StatusPanelController: NSObject, NSWindowDelegate {
         )
         panel.contentViewController = hosting
         panel.isFloatingPanel = true
-        panel.level = .popUpMenu
+        panel.level = appState.isPanelPinned ? .floating : .popUpMenu
         panel.hidesOnDeactivate = false
         panel.isReleasedWhenClosed = false
         panel.isOpaque = false
