@@ -18,6 +18,10 @@ final class StatusPanelController: NSObject, NSWindowDelegate {
 
     private var anchorTopY: CGFloat = 0
     private var anchorCenterX: CGFloat = 0
+    /// Screen that owns the status-item click; used for edge clamping. Never use
+    /// `panel.screen` — it is often stale (previous show / initial (0,0) frame) and
+    /// will shove the panel onto the wrong display on multi-monitor setups.
+    private var anchorScreen: NSScreen?
     private var isPresented = false
     private var isSyncingSize = false
 
@@ -59,7 +63,7 @@ final class StatusPanelController: NSObject, NSWindowDelegate {
     }
 
     func show() {
-        guard let button = statusItem?.button, let buttonWindow = button.window else {
+        guard statusItem?.button?.window != nil else {
             Log.error("show aborted: no status button/window", "controller")
             return
         }
@@ -73,11 +77,7 @@ final class StatusPanelController: NSObject, NSWindowDelegate {
         }
 
         appState.pruneMissingNotes()
-
-        let buttonRect = button.convert(button.bounds, to: nil)
-        let screenRect = buttonWindow.convertToScreen(buttonRect)
-        anchorTopY = screenRect.minY - 2
-        anchorCenterX = screenRect.midX
+        refreshAnchorFromStatusItem()
 
         syncContentSize()
         pinToAnchor()
@@ -88,9 +88,56 @@ final class StatusPanelController: NSObject, NSWindowDelegate {
         isPresented = true
         installDismissObserver()
         Log.info(
-            "panel shown size=\(panel.frame.size) origin=\(panel.frame.origin) pinned=\(appState.isPanelPinned)",
+            "panel shown size=\(panel.frame.size) origin=\(panel.frame.origin) anchor=(\(anchorCenterX),\(anchorTopY)) screen=\(anchorScreenDescription()) pinned=\(appState.isPanelPinned)",
             "controller"
         )
+    }
+
+    /// Resolve the panel's under-icon anchor from the status item, cross-checked
+    /// against the click's screen. On multi-monitor Macs the status-item button
+    /// window sometimes still reports the primary display's frame after a click on
+    /// a secondary menu bar; trusting the mouse screen keeps the panel on the
+    /// display the user actually clicked.
+    private func refreshAnchorFromStatusItem() {
+        guard let button = statusItem?.button, let buttonWindow = button.window else {
+            return
+        }
+
+        let buttonRect = button.convert(button.bounds, to: nil)
+        let reportedRect = buttonWindow.convertToScreen(buttonRect)
+        let mouse = NSEvent.mouseLocation
+        let clickScreen = screenContaining(mouse)
+        let reportedScreen = screenIntersecting(reportedRect) ?? buttonWindow.screen
+
+        // Prefer the click screen when the status-item frame disagrees with where
+        // the user actually clicked (common after menu-bar relocation).
+        if let clickScreen, let reportedScreen, clickScreen != reportedScreen {
+            anchorScreen = clickScreen
+            anchorCenterX = mouse.x
+            anchorTopY = clickScreen.visibleFrame.maxY - 2
+            Log.info(
+                "status-item frame on wrong screen; using click screen frame=\(clickScreen.frame) mouseX=\(mouse.x)",
+                "controller"
+            )
+            return
+        }
+
+        anchorScreen = clickScreen ?? reportedScreen ?? NSScreen.main
+        anchorCenterX = reportedRect.midX
+        anchorTopY = reportedRect.minY - 2
+    }
+
+    private func screenContaining(_ point: NSPoint) -> NSScreen? {
+        NSScreen.screens.first { $0.frame.contains(point) }
+    }
+
+    private func screenIntersecting(_ rect: NSRect) -> NSScreen? {
+        NSScreen.screens.first { $0.frame.intersects(rect) }
+    }
+
+    private func anchorScreenDescription() -> String {
+        guard let frame = anchorScreen?.frame else { return "nil" }
+        return "(\(Int(frame.minX)),\(Int(frame.minY))) \(Int(frame.width))x\(Int(frame.height))"
     }
 
     func hide() {
@@ -127,16 +174,43 @@ final class StatusPanelController: NSObject, NSWindowDelegate {
 
     private func pinToAnchor() {
         guard let panel else { return }
+        let size = panel.frame.size
         var origin = NSPoint(
-            x: anchorCenterX - panel.frame.width / 2,
-            y: anchorTopY - panel.frame.height
+            x: anchorCenterX - size.width / 2,
+            y: anchorTopY - size.height
         )
-        if let screen = panel.screen ?? NSScreen.main {
-            let visible = screen.visibleFrame
-            origin.x = min(max(origin.x, visible.minX + 8), visible.maxX - panel.frame.width - 8)
-            if origin.y < visible.minY + 8 { origin.y = visible.minY + 8 }
+        // Clamp only against the click/status-item screen — never panel.screen or
+        // NSScreen.main alone, which pull the window onto the wrong display when
+        // monitors are stacked or the panel was last shown elsewhere.
+        if let visible = screenForEdgeClamp()?.visibleFrame {
+            origin = clampOrigin(origin, size: size, to: visible)
         }
         panel.setFrameOrigin(origin)
+    }
+
+    /// Screen used for edge clamping. Prefer the resolved click/status-item
+    /// anchor; fall back to the screen containing the anchor point, then the
+    /// status-item window's screen. Never `panel.screen` / `NSScreen.main` alone.
+    private func screenForEdgeClamp() -> NSScreen? {
+        if let anchorScreen { return anchorScreen }
+        if let screen = screenContaining(NSPoint(x: anchorCenterX, y: anchorTopY)) {
+            return screen
+        }
+        return statusItem?.button?.window?.screen
+    }
+
+    private func clampOrigin(_ origin: NSPoint, size: NSSize, to visible: NSRect) -> NSPoint {
+        var origin = origin
+        origin.x = min(max(origin.x, visible.minX + 8), visible.maxX - size.width - 8)
+        if origin.y < visible.minY + 8 {
+            origin.y = visible.minY + 8
+        }
+        // Keep the top tucked under the menu bar on this screen when possible.
+        let maxTop = visible.maxY - 2
+        if origin.y + size.height > maxTop {
+            origin.y = maxTop - size.height
+        }
+        return origin
     }
 
     // Reposition (origin only) after AppKit resizes the window; never resize here (no loop).
@@ -232,7 +306,7 @@ final class StatusPanelController: NSObject, NSWindowDelegate {
     }
 
     private func pointIsInMenuBar(_ point: NSPoint) -> Bool {
-        let screen = NSScreen.screens.first { $0.frame.contains(point) }
+        let screen = screenContaining(point)
             ?? statusItem?.button?.window?.screen
             ?? NSScreen.main
         guard let screen else { return false }

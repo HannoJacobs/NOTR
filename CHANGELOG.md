@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.5
+
+- Fix multi-monitor panel placement so clicking the menu-bar icon on one display no longer opens NOTR on a different display (especially common with vertically stacked screens).
+- Root cause: `pinToAnchor` clamped the panel origin against `panel.screen ?? NSScreen.main`. After a prior show — or while the panel still sat at its initial `(0,0)` frame — that screen was often the primary/previous display, so edge clamping shoved the window onto the wrong monitor.
+- Resolve the anchor screen from the click itself: prefer the `NSScreen` that contains the mouse location, then the screen that intersects the status-item button frame, and never reuse a stale `panel.screen` for clamping.
+- When the status-item button window still reports the primary display's frame after a click on a secondary menu bar (a known multi-monitor AppKit quirk), rebuild the anchor from the click screen's menu-bar bottom and the mouse X so the panel stays under the icon the user actually clicked.
+- Horizontal drift ("way left" / "way right" on the correct screen) came from the same wrong-screen clamp: forcing X into another display's `visibleFrame` pushed the panel to that display's edge instead of centering under the icon.
+- Keep edge clamping, but only against the resolved click/status-item screen's `visibleFrame`, and keep the panel tucked under that screen's menu bar when height allows.
+- Add diagnostic logging for the chosen anchor point, screen frame, and the wrong-screen fallback path so multi-monitor placement regressions are visible in the Application Support session log.
+- Bump the shipped build to `0.5` and publish it as the live GitHub release asset through the same ad-hoc DMG packaging and install-verification pipeline used for prior releases.
+
 ## 0.4
 
 - Add a pin / keep-on-top toggle so NOTR can stay hovering while you work in another app — useful when reading a note and typing or browsing "behind" it without the panel auto-closing.
