@@ -10,12 +10,18 @@ struct PinnedNote: Identifiable, Codable, Equatable, Hashable {
         URL(fileURLWithPath: path)
     }
 
+    var isUntitledDraft: Bool {
+        path.isEmpty
+    }
+
     var displayName: String {
-        url.lastPathComponent
+        if isUntitledDraft { return "Untitled" }
+        return url.lastPathComponent
     }
 
     var directoryHint: String {
-        url.deletingLastPathComponent().path.replacingOccurrences(
+        if isUntitledDraft { return "Not saved yet" }
+        return url.deletingLastPathComponent().path.replacingOccurrences(
             of: NSHomeDirectory(),
             with: "~"
         )

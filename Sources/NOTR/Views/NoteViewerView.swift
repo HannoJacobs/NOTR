@@ -42,7 +42,11 @@ struct NoteViewerView: View {
 
             // Fixed-width status slot so save state never reflows the pane.
             Group {
-                if appState.hasUnsavedChanges {
+                if appState.isUntitledDraft {
+                    Text(appState.hasMeaningfulContent ? "Unsaved" : "")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                } else if appState.hasUnsavedChanges {
                     Text("Saving…")
                         .font(.system(size: 10))
                         .foregroundStyle(.secondary)

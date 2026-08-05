@@ -98,11 +98,20 @@ struct MenuBarView: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(NotrTextButtonStyle(isActive: appState.isOpenNotePinned))
-        .help(
-            appState.isOpenNotePinned
-                ? "Remove from NOTR list (file stays on disk)"
-                : "Add this note to your NOTR list"
-        )
+        .disabled(appState.isUntitledDraft && !appState.hasMeaningfulContent)
+        .help(listMembershipHelp)
+    }
+
+    private var listMembershipHelp: String {
+        if appState.isOpenNotePinned {
+            return "Remove from NOTR list (file stays on disk)"
+        }
+        if appState.isUntitledDraft {
+            return appState.hasMeaningfulContent
+                ? "Save this note, then add it to your NOTR list"
+                : "Write something first, then you can save and pin it"
+        }
+        return "Add this note to your NOTR list"
     }
 
     private var pinToggleButton: some View {
@@ -380,7 +389,7 @@ struct MenuBarView: View {
                 .foregroundStyle(.secondary)
             Text("No pinned notes yet")
                 .font(.system(size: 13, weight: .medium))
-            Text("Click + to create a new note, or pin an existing text, markdown, or code file.")
+            Text("Click + to start a new note (name it when you save), or pin an existing text file.")
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -405,7 +414,7 @@ struct MenuBarView: View {
             .help("Settings")
 
             Menu {
-                Button("New Note…") {
+                Button("New Note") {
                     appState.createNewNote()
                 }
                 Button("Pin Existing…") {

@@ -2,6 +2,8 @@
 
 ## Full Send
 
+**Default:** After completing user-requested product/code work in this repo, run a full send automatically. Do not stop at a local build or wait to be asked — ship unless the user explicitly says not to (e.g. “no ship”, “don’t release”, “code only”).
+
 In this repo, a "full send" means full send. The work is not done at code changes, not done at a local build, and not done at "the release should pick it up."
 
 A full send includes all of the following:

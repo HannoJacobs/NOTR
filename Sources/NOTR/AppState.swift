@@ -85,13 +85,29 @@ final class AppState {
     /// Compatibility alias for the note currently in the viewer.
     var selectedNote: PinnedNote? { openNote }
 
+    var isUntitledDraft: Bool {
+        openNote?.isUntitledDraft == true
+    }
+
+    var hasMeaningfulContent: Bool {
+        !fileContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     var isOpenNotePinned: Bool {
-        guard let openNote else { return false }
+        guard let openNote, !openNote.isUntitledDraft else { return false }
         return pinnedNotes.contains { $0.path == openNote.path }
     }
 
     func toggleOpenNotePinned() {
         guard let note = openNote else { return }
+        if note.isUntitledDraft {
+            guard hasMeaningfulContent else {
+                Log.info("pin ignored: untitled draft has no content yet", "appState")
+                return
+            }
+            promptSaveLocation(pinAfterSave: true, leaveAfterSave: false)
+            return
+        }
         if let index = pinnedNotes.firstIndex(where: { $0.path == note.path }) {
             let removed = pinnedNotes[index]
             pinnedNotes.remove(at: index)
@@ -113,7 +129,8 @@ final class AppState {
         if existing.count != pinnedNotes.count {
             pinnedNotes = existing
         }
-        if let openNote, !FileManager.default.fileExists(atPath: openNote.path) {
+        if let openNote, !openNote.isUntitledDraft,
+           !FileManager.default.fileExists(atPath: openNote.path) {
             Log.info("open note missing on disk; clearing path=\(openNote.path)", "appState")
             clearSelection()
             return
@@ -155,22 +172,24 @@ final class AppState {
 
     func selectNote(_ note: PinnedNote) {
         Log.info("selectNote name=\(note.displayName) path=\(note.path)", "appState")
+        if isUntitledDraft && hasMeaningfulContent {
+            promptSaveLocation(pinAfterSave: false, leaveAfterSave: false) { [weak self] saved in
+                guard let self, saved else { return }
+                self.openPinnedNote(note)
+            }
+            return
+        }
         flushPendingSave()
-        openNote = note
-        selectedNoteID = note.id
-        loadSelectedContent(restartWatcher: true)
+        openPinnedNote(note)
     }
 
     func clearSelection() {
-        flushPendingSave()
-        stopWatching()
-        openNote = nil
-        selectedNoteID = nil
-        fileContent = ""
-        loadError = nil
-        saveError = nil
-        hasUnsavedChanges = false
-        isLoadingContent = false
+        if isUntitledDraft && hasMeaningfulContent {
+            // Ask for a filename only once there is content; Cancel keeps the draft open.
+            promptSaveLocation(pinAfterSave: false, leaveAfterSave: true)
+            return
+        }
+        discardOpenNote()
     }
 
     func updateSize(for noteID: UUID, width: CGFloat, height: CGFloat) {
@@ -195,11 +214,20 @@ final class AppState {
     }
 
     func reloadSelectedContent() {
+        guard !isUntitledDraft else { return }
         flushPendingSave()
         loadSelectedContent(restartWatcher: true)
     }
 
     func flushPendingSaveIfNeeded() {
+        if isUntitledDraft && hasMeaningfulContent {
+            promptSaveLocation(pinAfterSave: false, leaveAfterSave: true)
+            return
+        }
+        if isUntitledDraft {
+            discardOpenNote()
+            return
+        }
         flushPendingSave()
     }
 
@@ -209,36 +237,28 @@ final class AppState {
         fileContent = newValue
         hasUnsavedChanges = true
         saveError = nil
+        if isUntitledDraft {
+            // Stay in memory until the user names the file (after there is content).
+            return
+        }
         scheduleSave()
     }
 
+    /// Opens a blank untitled draft immediately — no Save dialog until there is content.
     func createNewNote() {
-        DispatchQueue.main.async {
-            NSApp.setActivationPolicy(.regular)
-            NSApp.activate(ignoringOtherApps: true)
-
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
-                guard let self else { return }
-
-                let panel = NSSavePanel()
-                panel.canCreateDirectories = true
-                panel.title = "New Note"
-                panel.message = "Choose where to save the new note."
-                panel.prompt = "Create"
-                panel.nameFieldStringValue = "Untitled.md"
-                panel.allowedContentTypes = [
-                    UTType(filenameExtension: "md") ?? .plainText,
-                    .plainText,
-                ]
-                panel.center()
-
-                panel.begin { [weak self] response in
-                    NSApp.setActivationPolicy(.accessory)
-                    guard let self, response == .OK, let url = panel.url else { return }
-                    self.createAndOpenNote(at: url)
-                }
-            }
+        if isUntitledDraft && !hasMeaningfulContent {
+            // Already on an empty draft; keep it.
+            return
         }
+        if isUntitledDraft && hasMeaningfulContent {
+            promptSaveLocation(pinAfterSave: false, leaveAfterSave: false) { [weak self] saved in
+                guard let self, saved else { return }
+                self.beginUntitledDraft()
+            }
+            return
+        }
+        flushPendingSave()
+        beginUntitledDraft()
     }
 
     func pickFiles() {
@@ -270,18 +290,132 @@ final class AppState {
         }
     }
 
-    private func createAndOpenNote(at url: URL) {
+    private func beginUntitledDraft() {
+        stopWatching()
+        saveWorkItem?.cancel()
+        saveWorkItem = nil
+        openNote = PinnedNote(path: "")
+        selectedNoteID = nil
+        fileContent = ""
+        loadError = nil
+        saveError = nil
+        hasUnsavedChanges = false
+        isLoadingContent = false
+        Log.info("opened untitled draft", "appState")
+    }
+
+    private func openPinnedNote(_ note: PinnedNote) {
+        openNote = note
+        selectedNoteID = note.id
+        loadSelectedContent(restartWatcher: true)
+    }
+
+    private func discardOpenNote() {
+        saveWorkItem?.cancel()
+        saveWorkItem = nil
+        stopWatching()
+        openNote = nil
+        selectedNoteID = nil
+        fileContent = ""
+        loadError = nil
+        saveError = nil
+        hasUnsavedChanges = false
+        isLoadingContent = false
+    }
+
+    /// Suggested name from the first non-empty line of the draft body.
+    private func suggestedFileName(from content: String) -> String {
+        let firstLine = content
+            .components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .first(where: { !$0.isEmpty }) ?? "Untitled"
+        var base = String(firstLine.prefix(48))
+        let invalid = CharacterSet(charactersIn: "/:\\?%*|\"<>")
+        base = base.components(separatedBy: invalid).joined(separator: "-")
+        base = base.trimmingCharacters(in: CharacterSet(charactersIn: ".- "))
+        if base.isEmpty { base = "Untitled" }
+        if base.lowercased().hasSuffix(".md") || base.lowercased().hasSuffix(".txt") {
+            return base
+        }
+        return "\(base).md"
+    }
+
+    private func promptSaveLocation(
+        pinAfterSave: Bool,
+        leaveAfterSave: Bool,
+        completion: ((Bool) -> Void)? = nil
+    ) {
+        guard isUntitledDraft else {
+            completion?(false)
+            return
+        }
+        guard hasMeaningfulContent else {
+            completion?(false)
+            return
+        }
+
+        let suggested = suggestedFileName(from: fileContent)
+        DispatchQueue.main.async {
+            NSApp.setActivationPolicy(.regular)
+            NSApp.activate(ignoringOtherApps: true)
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+                guard let self else { return }
+
+                let panel = NSSavePanel()
+                panel.canCreateDirectories = true
+                panel.title = "Save Note"
+                panel.message = "Choose a name and location for this note."
+                panel.prompt = "Save"
+                panel.nameFieldStringValue = suggested
+                panel.allowedContentTypes = [
+                    UTType(filenameExtension: "md") ?? .plainText,
+                    .plainText,
+                ]
+                panel.center()
+
+                panel.begin { [weak self] response in
+                    NSApp.setActivationPolicy(.accessory)
+                    guard let self else { return }
+                    guard response == .OK, let url = panel.url else {
+                        completion?(false)
+                        return
+                    }
+                    let ok = self.finalizeDraft(to: url, pin: pinAfterSave)
+                    if ok, leaveAfterSave {
+                        self.discardOpenNote()
+                    }
+                    completion?(ok)
+                }
+            }
+        }
+    }
+
+    @discardableResult
+    private func finalizeDraft(to url: URL, pin: Bool) -> Bool {
+        guard var note = openNote, note.isUntitledDraft else { return false }
         do {
-            try "".write(to: url, atomically: true, encoding: .utf8)
-            flushPendingSave()
-            let note = PinnedNote(path: url.path)
+            try fileContent.write(to: url, atomically: true, encoding: .utf8)
+            note.path = url.path
             openNote = note
-            selectedNoteID = nil
-            Log.info("created new note path=\(note.path)", "appState")
-            loadSelectedContent(restartWatcher: true)
+            hasUnsavedChanges = false
+            saveError = nil
+            startWatching(path: note.path)
+            Log.info("saved new note path=\(note.path) bytes=\(fileContent.utf8.count)", "appState")
+            if pin {
+                if !pinnedNotes.contains(where: { $0.path == note.path }) {
+                    var next = pinnedNotes
+                    next.append(note)
+                    pinnedNotes = next
+                }
+                selectedNoteID = note.id
+                Log.info("note list pin on path=\(note.path)", "appState")
+            }
+            return true
         } catch {
-            loadError = error.localizedDescription
-            Log.error("create note failed path=\(url.path) error=\(error.localizedDescription)", "appState")
+            saveError = error.localizedDescription
+            Log.error("save new note failed path=\(url.path) error=\(error.localizedDescription)", "appState")
+            return false
         }
     }
 
@@ -303,7 +437,7 @@ final class AppState {
     }
 
     private func saveSelectedContent() {
-        guard let note = openNote else { return }
+        guard let note = openNote, !note.isUntitledDraft else { return }
         guard hasUnsavedChanges else { return }
 
         do {
@@ -326,6 +460,10 @@ final class AppState {
         guard let note = openNote else {
             fileContent = ""
             loadError = nil
+            return
+        }
+
+        if note.isUntitledDraft {
             return
         }
 

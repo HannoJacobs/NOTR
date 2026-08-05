@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.7
+
+- Change **New Note** so it no longer blocks on a Save dialog before you can write: choosing New Note opens an untitled in-memory draft immediately.
+- Drafts use an empty path (`Untitled` / “Not saved yet”) and stay out of the pin list and off disk until you name them; typing does not autosave to a temporary file.
+- The Save dialog appears only after the draft has meaningful content — when you press Back, dismiss the panel, or choose **Pin to NOTR**. Empty drafts discard with no prompt.
+- Suggested filename is derived from the first non-empty line of the draft (sanitized, `.md` by default) so naming happens after the note has substance.
+- Cancel on the Save dialog keeps the untitled draft open so you can keep editing; successful save writes the UTF-8 file, starts the normal watcher/autosave path, and optionally pins when save was triggered from **Pin to NOTR**.
+- Pin is disabled on empty drafts (with help text explaining you need content first); after content exists, Pin runs save-then-pin in one flow.
+- Path bar shows “Unsaved” for drafts with content instead of the normal “Saving…” slot; reload is a no-op on untitled drafts.
+- Document the write-first / name-later New Note behavior in README and empty-state copy, and record that full send is the default shipping posture in `AGENTS.md`.
+- Bump the shipped build to `0.7` and publish it as the live GitHub release asset through the same ad-hoc DMG packaging and install-verification pipeline used for prior releases.
+
 ## 0.6
 
 - Add a true **create new note** path so NOTR is no longer limited to pinning files that already exist elsewhere on disk.
