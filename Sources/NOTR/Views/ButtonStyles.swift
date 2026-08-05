@@ -31,13 +31,20 @@ struct NotrRowButtonStyle: ButtonStyle {
 }
 
 struct NotrTextButtonStyle: ButtonStyle {
+    var isActive: Bool = false
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
+            .foregroundStyle(isActive ? Color.accentColor : Color.primary)
             .padding(.horizontal, 6)
             .padding(.vertical, 3)
             .background(
                 RoundedRectangle(cornerRadius: 5, style: .continuous)
-                    .fill(configuration.isPressed ? Color.primary.opacity(0.12) : Color.clear)
+                    .fill(
+                        configuration.isPressed
+                            ? Color.primary.opacity(0.12)
+                            : (isActive ? Color.accentColor.opacity(0.16) : Color.clear)
+                    )
             )
             .opacity(configuration.isPressed ? 0.75 : 1)
             .animation(.easeOut(duration: 0.08), value: configuration.isPressed)

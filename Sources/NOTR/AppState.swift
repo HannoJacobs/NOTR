@@ -2,6 +2,7 @@ import AppKit
 import Foundation
 import Observation
 import SwiftUI
+import UniformTypeIdentifiers
 
 @Observable
 final class AppState {
@@ -14,6 +15,10 @@ final class AppState {
         didSet { persistPins() }
     }
 
+    /// Note currently open in the viewer. May or may not be in `pinnedNotes`.
+    var openNote: PinnedNote?
+
+    /// Persisted ID of the last *pinned* note opened (for restore on launch).
     var selectedNoteID: UUID? {
         didSet {
             if let selectedNoteID {
@@ -66,8 +71,9 @@ final class AppState {
         pruneMissingNotes()
         if let saved = UserDefaults.standard.string(forKey: Self.lastSelectedKey),
            let id = UUID(uuidString: saved),
-           pinnedNotes.contains(where: { $0.id == id }) {
+           let note = pinnedNotes.first(where: { $0.id == id }) {
             selectedNoteID = id
+            openNote = note
             loadSelectedContent(restartWatcher: true)
         }
     }
@@ -76,9 +82,30 @@ final class AppState {
         isPanelPinned.toggle()
     }
 
-    var selectedNote: PinnedNote? {
-        guard let selectedNoteID else { return nil }
-        return pinnedNotes.first(where: { $0.id == selectedNoteID })
+    /// Compatibility alias for the note currently in the viewer.
+    var selectedNote: PinnedNote? { openNote }
+
+    var isOpenNotePinned: Bool {
+        guard let openNote else { return false }
+        return pinnedNotes.contains { $0.path == openNote.path }
+    }
+
+    func toggleOpenNotePinned() {
+        guard let note = openNote else { return }
+        if let index = pinnedNotes.firstIndex(where: { $0.path == note.path }) {
+            let removed = pinnedNotes[index]
+            pinnedNotes.remove(at: index)
+            if selectedNoteID == removed.id || selectedNoteID == note.id {
+                selectedNoteID = nil
+            }
+            Log.info("note list pin off path=\(note.path)", "appState")
+        } else {
+            var next = pinnedNotes
+            next.append(note)
+            pinnedNotes = next
+            selectedNoteID = note.id
+            Log.info("note list pin on path=\(note.path)", "appState")
+        }
     }
 
     func pruneMissingNotes() {
@@ -86,8 +113,13 @@ final class AppState {
         if existing.count != pinnedNotes.count {
             pinnedNotes = existing
         }
-        if let selectedNoteID, !pinnedNotes.contains(where: { $0.id == selectedNoteID }) {
+        if let openNote, !FileManager.default.fileExists(atPath: openNote.path) {
+            Log.info("open note missing on disk; clearing path=\(openNote.path)", "appState")
             clearSelection()
+            return
+        }
+        if let selectedNoteID, !pinnedNotes.contains(where: { $0.id == selectedNoteID }) {
+            self.selectedNoteID = nil
         }
     }
 
@@ -103,10 +135,11 @@ final class AppState {
     }
 
     func removeNote(_ note: PinnedNote) {
+        pinnedNotes.removeAll { $0.id == note.id || $0.path == note.path }
         if selectedNoteID == note.id {
-            clearSelection()
+            selectedNoteID = nil
         }
-        pinnedNotes.removeAll { $0.id == note.id }
+        // Keep the editor open if this was the open note; only Back leaves.
     }
 
     func movePinnedNote(from fromIndex: Int, to toIndex: Int) {
@@ -123,6 +156,7 @@ final class AppState {
     func selectNote(_ note: PinnedNote) {
         Log.info("selectNote name=\(note.displayName) path=\(note.path)", "appState")
         flushPendingSave()
+        openNote = note
         selectedNoteID = note.id
         loadSelectedContent(restartWatcher: true)
     }
@@ -130,6 +164,7 @@ final class AppState {
     func clearSelection() {
         flushPendingSave()
         stopWatching()
+        openNote = nil
         selectedNoteID = nil
         fileContent = ""
         loadError = nil
@@ -139,9 +174,18 @@ final class AppState {
     }
 
     func updateSize(for noteID: UUID, width: CGFloat, height: CGFloat) {
-        guard let index = pinnedNotes.firstIndex(where: { $0.id == noteID }) else { return }
         let clampedWidth = max(280, min(900, Double(width)))
         let clampedHeight = max(180, min(900, Double(height)))
+
+        if var open = openNote, open.id == noteID {
+            if abs(open.width - clampedWidth) >= 1 || abs(open.height - clampedHeight) >= 1 {
+                open.width = clampedWidth
+                open.height = clampedHeight
+                openNote = open
+            }
+        }
+
+        guard let index = pinnedNotes.firstIndex(where: { $0.id == noteID }) else { return }
         if abs(pinnedNotes[index].width - clampedWidth) < 1,
            abs(pinnedNotes[index].height - clampedHeight) < 1 {
             return
@@ -166,6 +210,35 @@ final class AppState {
         hasUnsavedChanges = true
         saveError = nil
         scheduleSave()
+    }
+
+    func createNewNote() {
+        DispatchQueue.main.async {
+            NSApp.setActivationPolicy(.regular)
+            NSApp.activate(ignoringOtherApps: true)
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+                guard let self else { return }
+
+                let panel = NSSavePanel()
+                panel.canCreateDirectories = true
+                panel.title = "New Note"
+                panel.message = "Choose where to save the new note."
+                panel.prompt = "Create"
+                panel.nameFieldStringValue = "Untitled.md"
+                panel.allowedContentTypes = [
+                    UTType(filenameExtension: "md") ?? .plainText,
+                    .plainText,
+                ]
+                panel.center()
+
+                panel.begin { [weak self] response in
+                    NSApp.setActivationPolicy(.accessory)
+                    guard let self, response == .OK, let url = panel.url else { return }
+                    self.createAndOpenNote(at: url)
+                }
+            }
+        }
     }
 
     func pickFiles() {
@@ -197,6 +270,21 @@ final class AppState {
         }
     }
 
+    private func createAndOpenNote(at url: URL) {
+        do {
+            try "".write(to: url, atomically: true, encoding: .utf8)
+            flushPendingSave()
+            let note = PinnedNote(path: url.path)
+            openNote = note
+            selectedNoteID = nil
+            Log.info("created new note path=\(note.path)", "appState")
+            loadSelectedContent(restartWatcher: true)
+        } catch {
+            loadError = error.localizedDescription
+            Log.error("create note failed path=\(url.path) error=\(error.localizedDescription)", "appState")
+        }
+    }
+
     private func scheduleSave() {
         saveWorkItem?.cancel()
         let work = DispatchWorkItem { [weak self] in
@@ -215,7 +303,7 @@ final class AppState {
     }
 
     private func saveSelectedContent() {
-        guard let note = selectedNote else { return }
+        guard let note = openNote else { return }
         guard hasUnsavedChanges else { return }
 
         do {
@@ -235,7 +323,7 @@ final class AppState {
             stopWatching()
         }
 
-        guard let note = selectedNote else {
+        guard let note = openNote else {
             fileContent = ""
             loadError = nil
             return

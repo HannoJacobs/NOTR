@@ -5,7 +5,8 @@ Menu-bar quick viewer for text notes on macOS. Pin a few files you look at often
 ## What it does
 
 - Lives in the menu bar (note icon)
-- Pin any text-ish files (`.md`, `.txt`, `.py`, etc.) via **+**
+- **+** menu: create a **New Note…** (Save dialog) or **Pin Existing…** text-ish files (`.md`, `.txt`, `.py`, etc.)
+- While editing, **Pin to NOTR** / **In NOTR** adds or removes the file from your quick-view list (the file always stays on disk)
 - Click a pin to open a plain-text editor with autosave
 - Drag the corner handle to resize — size is sticky per file
 - Drag rows to reorder; right-click → remove from NOTR (does not delete the file)

@@ -35,7 +35,10 @@ struct MenuBarView: View {
             appState.pruneMissingNotes()
             onContentSizeMayHaveChanged?()
         }
-        .onChange(of: appState.selectedNoteID) { _, _ in
+        .onChange(of: appState.openNote?.id) { _, _ in
+            DispatchQueue.main.async { onContentSizeMayHaveChanged?() }
+        }
+        .onChange(of: appState.isOpenNotePinned) { _, _ in
             DispatchQueue.main.async { onContentSizeMayHaveChanged?() }
         }
         .onChange(of: showingSettings) { _, _ in
@@ -66,6 +69,8 @@ struct MenuBarView: View {
 
             Spacer(minLength: 8)
 
+            listMembershipButton
+
             pinToggleButton
 
             Button {
@@ -81,6 +86,23 @@ struct MenuBarView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
+    }
+
+    private var listMembershipButton: some View {
+        Button {
+            appState.toggleOpenNotePinned()
+        } label: {
+            Text(appState.isOpenNotePinned ? "In NOTR" : "Pin to NOTR")
+                .font(.system(size: 11, weight: .medium))
+                .frame(height: 22)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(NotrTextButtonStyle(isActive: appState.isOpenNotePinned))
+        .help(
+            appState.isOpenNotePinned
+                ? "Remove from NOTR list (file stays on disk)"
+                : "Add this note to your NOTR list"
+        )
     }
 
     private var pinToggleButton: some View {
@@ -358,7 +380,7 @@ struct MenuBarView: View {
                 .foregroundStyle(.secondary)
             Text("No pinned notes yet")
                 .font(.system(size: 13, weight: .medium))
-            Text("Click + to pin a text, markdown, or code file for quick viewing.")
+            Text("Click + to create a new note, or pin an existing text, markdown, or code file.")
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -382,16 +404,23 @@ struct MenuBarView: View {
             .buttonStyle(NotrIconButtonStyle())
             .help("Settings")
 
-            Button {
-                appState.pickFiles()
+            Menu {
+                Button("New Note…") {
+                    appState.createNewNote()
+                }
+                Button("Pin Existing…") {
+                    appState.pickFiles()
+                }
             } label: {
                 Image(systemName: "plus")
                     .font(.system(size: 13, weight: .semibold))
                     .frame(width: 28, height: 28)
                     .contentShape(Rectangle())
             }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
             .buttonStyle(NotrIconButtonStyle())
-            .help("Pin a file")
+            .help("New note or pin an existing file")
 
             Spacer()
 

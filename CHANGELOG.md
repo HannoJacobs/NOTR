@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.6
+
+- Add a true **create new note** path so NOTR is no longer limited to pinning files that already exist elsewhere on disk.
+- The footer `+` control is now a menu with **New Note…** and **Pin Existing…**; Pin Existing keeps the previous multi-select open-panel flow for text-ish files.
+- **New Note…** presents an `NSSavePanel` (same accessory→regular activation dance as the open panel) so you choose folder and filename each time; default name is `Untitled.md`, with markdown and plain-text types allowed.
+- Creating a note writes a fresh UTF-8 file at the chosen path, opens it in the plain-text editor immediately, and starts the existing file watcher / autosave pipeline against that real file.
+- New notes start **unpinned**: they are not added to the quick-view list until you explicitly opt in, so a throwaway scratch file can stay on disk without cluttering NOTR.
+- While any note is open, the header shows a labeled **Pin to NOTR** / **In NOTR** control for list membership. This is separate from the existing pin-glyph control, which still means “keep the panel open while working in other apps.”
+- Toggling list membership on appends the open note (including its current size) into `pinnedNotes` and persists it; toggling off removes it from the list but keeps the editor open and never deletes the file.
+- Viewer state is driven by `openNote`, which may or may not be in `pinnedNotes`, so unpinned drafts and pinned notes share one editor path. Going Back leaves an unpinned file on disk only; missing files still prune from the list and clear a deleted open note.
+- Empty-state and README copy now mention creating a new note as well as pinning existing files.
+- Bump the shipped build to `0.6` and publish it as the live GitHub release asset through the same ad-hoc DMG packaging and install-verification pipeline used for prior releases.
+
 ## 0.5
 
 - Fix multi-monitor panel placement so clicking the menu-bar icon on one display no longer opens NOTR on a different display (especially common with vertically stacked screens).
