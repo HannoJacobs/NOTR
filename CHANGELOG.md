@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.8
+
+- Add an explicit header **Save** control (`square.and.arrow.down`) on untitled drafts so you can name and write the note without leaving the editor via Back.
+- The Save icon is enabled only after the draft has meaningful content; empty drafts keep it disabled with help text explaining you need to write first.
+- Clicking Save runs the same Save dialog as Back / dismiss (suggested filename from the first line, Cancel keeps the draft open) but leaves you in the note afterward so you can keep editing or pin.
+- On untitled drafts the Save icon replaces the Reload control (reload remains for file-backed notes); path bar “Unsaved” / “Not saved yet” behavior is unchanged.
+- Wire Save through a public `saveUntitledDraft()` path on app state so Pin-to-NOTR and Back continue to share the same finalize/write/watcher pipeline.
+- Update README to document the in-note Save affordance alongside Back and Pin to NOTR as ways to name a draft.
+- Bump the shipped build to `0.8` and publish it as the live GitHub release asset through the same ad-hoc DMG packaging and install-verification pipeline used for prior releases.
+- Keep write-first New Note behavior from `0.7`: no filename prompt until there is content, whether Save is triggered from the new icon or from leaving/pinning.
+
 ## 0.7
 
 - Change **New Note** so it no longer blocks on a Save dialog before you can write: choosing New Note opens an untitled in-memory draft immediately.

@@ -73,19 +73,41 @@ struct MenuBarView: View {
 
             pinToggleButton
 
-            Button {
-                appState.reloadSelectedContent()
-            } label: {
-                Image(systemName: "arrow.clockwise")
-                    .font(.system(size: 12, weight: .medium))
-                    .frame(width: 28, height: 28)
-                    .contentShape(Rectangle())
+            if appState.isUntitledDraft {
+                saveDraftButton
+            } else {
+                Button {
+                    appState.reloadSelectedContent()
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 12, weight: .medium))
+                        .frame(width: 28, height: 28)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(NotrIconButtonStyle())
+                .help("Reload file")
             }
-            .buttonStyle(NotrIconButtonStyle())
-            .help("Reload file")
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
+    }
+
+    private var saveDraftButton: some View {
+        Button {
+            appState.saveUntitledDraft()
+        } label: {
+            Image(systemName: "square.and.arrow.down")
+                .font(.system(size: 12, weight: .medium))
+                .frame(width: 28, height: 28)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(NotrIconButtonStyle(isActive: appState.hasMeaningfulContent))
+        .disabled(!appState.hasMeaningfulContent)
+        .help(
+            appState.hasMeaningfulContent
+                ? "Save note — choose a name and location"
+                : "Write something first, then save"
+        )
     }
 
     private var listMembershipButton: some View {

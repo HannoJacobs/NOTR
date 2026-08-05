@@ -219,6 +219,16 @@ final class AppState {
         loadSelectedContent(restartWatcher: true)
     }
 
+    /// Name and write the current untitled draft without leaving the editor.
+    func saveUntitledDraft() {
+        guard isUntitledDraft else { return }
+        guard hasMeaningfulContent else {
+            Log.info("save ignored: untitled draft has no content yet", "appState")
+            return
+        }
+        promptSaveLocation(pinAfterSave: false, leaveAfterSave: false)
+    }
+
     func flushPendingSaveIfNeeded() {
         if isUntitledDraft && hasMeaningfulContent {
             promptSaveLocation(pinAfterSave: false, leaveAfterSave: true)
