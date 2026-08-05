@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.9
+
+- Focus the note editor automatically when opening **New Note** or selecting a pinned note, so the caret is ready to type without an extra click into the text area.
+- Drive focus through an `editorFocusToken` that `PlainTextEditor` observes: on token change it activates the app, keys the panel, and makes the `NSTextView` first responder (with a short deferred retry so the view is in the window hierarchy after SwiftUI swaps to the draft).
+- Re-focus when choosing New Note while already on an empty untitled draft, so a second New Note click still lands the caret for typing.
+- Keep the header **Save** icon on untitled drafts from `0.8` (`square.and.arrow.down`): enabled once there is content, opens the name/location Save dialog without leaving the note via Back.
+- Log `editor focused` with a short token prefix so session diagnostics can confirm autofocus fired after New Note / open.
+- Update README to note that New Note is caret-ready immediately.
+- Bump the shipped build to `0.9` and publish it as the live GitHub release asset through the same ad-hoc DMG packaging and install-verification pipeline used for prior releases.
+- Leave Back / dismiss / Pin to NOTR save prompts unchanged; Save icon remains the in-note path for naming a draft after writing.
+
 ## 0.8
 
 - Add an explicit header **Save** control (`square.and.arrow.down`) on untitled drafts so you can name and write the note without leaving the editor via Back.

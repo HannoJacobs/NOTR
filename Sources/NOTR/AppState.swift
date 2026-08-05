@@ -53,6 +53,9 @@ final class AppState {
     var saveError: String?
     var hasUnsavedChanges = false
 
+    /// Bumped when the editor should take keyboard focus (e.g. New Note / open note).
+    var editorFocusToken: UUID = UUID()
+
     private var fileWatcher: DispatchSourceFileSystemObject?
     private var watchedDescriptor: Int32 = -1
     private var saveWorkItem: DispatchWorkItem?
@@ -257,7 +260,8 @@ final class AppState {
     /// Opens a blank untitled draft immediately — no Save dialog until there is content.
     func createNewNote() {
         if isUntitledDraft && !hasMeaningfulContent {
-            // Already on an empty draft; keep it.
+            // Already on an empty draft; put the caret back so typing is immediate.
+            requestEditorFocus()
             return
         }
         if isUntitledDraft && hasMeaningfulContent {
@@ -312,12 +316,25 @@ final class AppState {
         hasUnsavedChanges = false
         isLoadingContent = false
         Log.info("opened untitled draft", "appState")
+        requestEditorFocus()
     }
 
     private func openPinnedNote(_ note: PinnedNote) {
         openNote = note
         selectedNoteID = note.id
         loadSelectedContent(restartWatcher: true)
+        requestEditorFocus()
+    }
+
+    func requestEditorFocus() {
+        // Delay so the SwiftUI/AppKit editor is in the hierarchy after New Note / open.
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.editorFocusToken = UUID()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+                self?.editorFocusToken = UUID()
+            }
+        }
     }
 
     private func discardOpenNote() {

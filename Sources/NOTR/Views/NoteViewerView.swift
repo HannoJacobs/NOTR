@@ -81,7 +81,8 @@ struct NoteViewerView: View {
                     set: { appState.updateFileContent($0) }
                 ),
                 isLineWrappingEnabled: appState.lineWrapEnabled,
-                onTextChange: { appState.updateFileContent($0) }
+                onTextChange: { appState.updateFileContent($0) },
+                focusToken: appState.editorFocusToken
             )
             .padding(4)
         }

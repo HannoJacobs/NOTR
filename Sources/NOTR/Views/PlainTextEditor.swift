@@ -5,6 +5,8 @@ struct PlainTextEditor: NSViewRepresentable {
     @Binding var text: String
     var isLineWrappingEnabled: Bool
     var onTextChange: (String) -> Void
+    /// When this value changes, the text view becomes first responder.
+    var focusToken: UUID?
 
     func makeCoordinator() -> Coordinator {
         Coordinator(self)
@@ -36,6 +38,7 @@ struct PlainTextEditor: NSViewRepresentable {
         textView.drawsBackground = false
         textView.string = text
         applyWrapping(textView, enabled: isLineWrappingEnabled, in: scrollView)
+        context.coordinator.focusIfNeeded(scrollView: scrollView, textView: textView, token: focusToken)
         return scrollView
     }
 
@@ -53,6 +56,7 @@ struct PlainTextEditor: NSViewRepresentable {
         textView.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
         textView.textColor = .labelColor
         textView.insertionPointColor = .labelColor
+        context.coordinator.focusIfNeeded(scrollView: scrollView, textView: textView, token: focusToken)
     }
 
     private func applyWrapping(_ textView: NSTextView, enabled: Bool, in scrollView: NSScrollView) {
@@ -85,9 +89,22 @@ struct PlainTextEditor: NSViewRepresentable {
 
     final class Coordinator: NSObject, NSTextViewDelegate {
         var parent: PlainTextEditor
+        private var lastFocusToken: UUID?
 
         init(_ parent: PlainTextEditor) {
             self.parent = parent
+        }
+
+        func focusIfNeeded(scrollView: NSScrollView, textView: NSTextView, token: UUID?) {
+            guard let token, token != lastFocusToken else { return }
+            lastFocusToken = token
+            DispatchQueue.main.async {
+                guard let window = scrollView.window else { return }
+                NSApp.activate(ignoringOtherApps: true)
+                window.makeKeyAndOrderFront(nil)
+                window.makeFirstResponder(textView)
+                Log.info("editor focused token=\(token.uuidString.prefix(8))", "editor")
+            }
         }
 
         func textDidChange(_ notification: Notification) {
