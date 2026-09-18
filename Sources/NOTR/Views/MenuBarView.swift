@@ -242,6 +242,9 @@ struct MenuBarView: View {
 
     private var pinList: some View {
         VStack(spacing: 0) {
+            toolbar
+            Divider()
+
             if appState.pinnedNotes.isEmpty {
                 emptyState
             } else {
@@ -268,9 +271,6 @@ struct MenuBarView: View {
                 .scrollDisabled(draggingNoteID != nil)
                 .frame(width: 320, height: listHeight)
             }
-
-            Divider()
-            footer
         }
     }
 
@@ -467,7 +467,7 @@ struct MenuBarView: View {
         .frame(width: 320, height: 160)
     }
 
-    private var footer: some View {
+    private var toolbar: some View {
         HStack(spacing: 6) {
             dragGrip
 

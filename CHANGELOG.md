@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.1
+
+- Moved the pin-list toolbar from the bottom of the panel to the top, so the drag grip, detach, settings, new-note and Quit controls sit above the list of notes instead of below it.
+- The bar now reads in the same place as the note view's own header, so the controls do not jump from top to bottom as you move between the pin list and an open note.
+- Putting the drag grip at the top also matches where a window's title bar lives, which makes the drag-to-detach gesture added in `1.0` easier to find.
+- Renamed the view from `footer` to `toolbar`; a property called `footer` rendering at the top of the panel is exactly the kind of stale name that misleads the next reader.
+- The divider moved with it: the bar is separated from the list below rather than from the list above, so the panel still reads as one grouped surface.
+- No behaviour change to any of the controls themselves — same buttons, same order, same actions, same hover and press feedback.
+- The empty-state case moves with it too: with no pinned notes the toolbar sits above the placeholder rather than under it.
+- Note-view chrome is untouched; that header was already at the top and keeps its back button, title and per-note actions exactly as before.
+- Packaging / full-send: bump CFBundle version to `1.1`, ship `NOTR.dmg` on GitHub release `v1.1`, and reinstall `/Applications/NOTR.app` with launch-log proof for version/build `1.1`.
+
 ## 1.0
 
 - New third window mode: **drag the panel off the menu bar to detach it.** A grip sits beside the pin button in both the note header and the pin-list footer; drag it to move the window, drag more than 8pt while anchored to tear it off, or double-click to toggle. A detached panel floats above every other app, never auto-dismisses, and remembers its position across hide/show and across launches.
