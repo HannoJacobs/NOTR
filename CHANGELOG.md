@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.0
+
+- New third window mode: **drag the panel off the menu bar to detach it.** A grip sits beside the pin button in both the note header and the pin-list footer; drag it to move the window, drag more than 8pt while anchored to tear it off, or double-click to toggle. A detached panel floats above every other app, never auto-dismisses, and remembers its position across hide/show and across launches.
+- Detaching suppresses **both** of NOTR's auto-dismiss paths, not just one. The panel closes on app deactivation *and* on a click in the menu-bar strip (the pair that keeps the emoji viewer working while still closing when another menu-bar item opens); a detached window has to ignore both or it would vanish the moment you clicked back into the app you are taking notes about.
+- Position is anchored by the window's **top-left** while detached, not its origin. NOTR resizes itself to its content, so anchoring the origin would shove the window up the screen every time a note got longer; anchoring the top-left means it grows downward from where you parked it.
+- `windowDidResize` and the content-size callback now route through one detach-aware `positionPanel()` instead of calling `pinToAnchor()` directly. Both previously re-anchored unconditionally, which would have yanked a detached window back under the menu-bar icon on every keystroke that changed the content height.
+- The drag grip declares a definite `intrinsicContentSize` in both axes. This matters more here than in a fixed-width panel: NOTR sizes its window from `hostingController.view.fittingSize`, so an `NSViewRepresentable` with no intrinsic size does not merely stretch — it inflates the whole panel to the 1000pt clamp ceiling.
+- The pin button hides while detached rather than sitting there inert, and window level is now decided in one place (`applyWindowLevel`) so pinned and detached cannot disagree about whether the panel floats.
+- Dragging is implemented as an AppKit mouse-tracking view rather than a SwiftUI `DragGesture`, so the window follows the cursor 1:1 in screen coordinates with no gesture-recognizer latency and no flipped-coordinate conversion. Drag clamping keeps at least 80pt of the window reachable on the screen under the cursor, including across displays.
+- Anchored behaviour is untouched: the panel still opens centred under the status item, still clamps to the clicked screen, and pin still works exactly as before for anyone who does not want a floating window.
+- Packaging / full-send: bump CFBundle version to `1.0`, ship `NOTR.dmg` on GitHub release `v1.0`, and reinstall `/Applications/NOTR.app` with launch-log proof for version/build `1.0`.
+
 ## 0.9
 
 - Focus the note editor automatically when opening **New Note** or selecting a pinned note, so the caret is ready to type without an extra click into the text area.

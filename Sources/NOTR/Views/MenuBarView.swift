@@ -5,6 +5,8 @@ struct MenuBarView: View {
     @Environment(AppState.self) private var appState
     var onClose: (() -> Void)?
     var onContentSizeMayHaveChanged: (() -> Void)?
+    /// Supplied by StatusPanelController; moves the window and tears it off the menu bar.
+    var dragActions = PanelDragActions()
 
     @State private var showingSettings = false
     @State private var draggingNoteID: UUID?
@@ -71,7 +73,12 @@ struct MenuBarView: View {
 
             listMembershipButton
 
-            pinToggleButton
+            dragGrip
+
+            if !appState.isPanelDetached {
+                pinToggleButton
+            }
+            detachToggleButton
 
             if appState.isUntitledDraft {
                 saveDraftButton
@@ -134,6 +141,46 @@ struct MenuBarView: View {
                 : "Write something first, then you can save and pin it"
         }
         return "Add this note to your NOTR list"
+    }
+
+    /// Drag to move the window; drag away from the menu bar to tear it off.
+    /// Fixed size on purpose — the window sizes itself to its content, so a flexible
+    /// element here would inflate the whole panel.
+    private var dragGrip: some View {
+        PanelDragHandle(
+            onBegan: dragActions.began,
+            onChanged: dragActions.changed,
+            onEnded: dragActions.ended,
+            onDoubleClick: { appState.togglePanelDetached() }
+        )
+        .frame(
+            width: PanelDragHandleView.handleWidth,
+            height: PanelDragHandleView.handleHeight
+        )
+        .overlay(
+            Image(systemName: "line.3.horizontal")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(.tertiary)
+                .allowsHitTesting(false)
+        )
+        .help(appState.isPanelDetached
+              ? "Drag to move · double-click to snap back to the menu bar"
+              : "Drag to move · drag away from the menu bar to detach")
+    }
+
+    private var detachToggleButton: some View {
+        Button {
+            appState.togglePanelDetached()
+        } label: {
+            Image(systemName: appState.isPanelDetached ? "menubar.arrow.up.rectangle" : "macwindow")
+                .font(.system(size: 12, weight: .medium))
+                .frame(width: 28, height: 28)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(NotrIconButtonStyle(isActive: appState.isPanelDetached))
+        .help(appState.isPanelDetached
+              ? "Reattach to the menu bar"
+              : "Detach into a floating window (or drag the grip)")
     }
 
     private var pinToggleButton: some View {
@@ -422,7 +469,12 @@ struct MenuBarView: View {
 
     private var footer: some View {
         HStack(spacing: 6) {
-            pinToggleButton
+            dragGrip
+
+            if !appState.isPanelDetached {
+                pinToggleButton
+            }
+            detachToggleButton
 
             Button {
                 showingSettings = true

@@ -10,6 +10,7 @@ final class AppState {
     private static let lastSelectedKey = "notr.lastSelectedNoteID"
     private static let lineWrapKey = "notr.lineWrapEnabled"
     private static let panelPinnedKey = "notr.panelPinned"
+    private static let panelDetachedKey = "notr.panelDetached"
 
     var pinnedNotes: [PinnedNote] = [] {
         didSet { persistPins() }
@@ -44,8 +45,21 @@ final class AppState {
         }
     }
 
+    /// Free-floating window mode: dragged off the menu bar, hovers over every app.
+    /// Supersedes pinning while on — detached is always on top and never auto-dismisses.
+    var isPanelDetached: Bool {
+        didSet {
+            guard isPanelDetached != oldValue else { return }
+            UserDefaults.standard.set(isPanelDetached, forKey: Self.panelDetachedKey)
+            Log.info("panel \(isPanelDetached ? "detached" : "reattached")", "appState")
+            onPanelDetachChanged?(isPanelDetached)
+        }
+    }
+
     /// Hook for StatusPanelController to react when pin toggles (e.g. unpin while inactive → hide).
     var onPanelPinnedChanged: ((Bool) -> Void)?
+    /// Hook for StatusPanelController when the panel detaches from / returns to the menu bar.
+    var onPanelDetachChanged: ((Bool) -> Void)?
 
     var fileContent: String = ""
     var loadError: String?
@@ -69,6 +83,7 @@ final class AppState {
             lineWrapEnabled = UserDefaults.standard.bool(forKey: Self.lineWrapKey)
         }
         isPanelPinned = UserDefaults.standard.bool(forKey: Self.panelPinnedKey)
+        isPanelDetached = UserDefaults.standard.bool(forKey: Self.panelDetachedKey)
 
         loadPins()
         pruneMissingNotes()
@@ -83,6 +98,10 @@ final class AppState {
 
     func togglePanelPinned() {
         isPanelPinned.toggle()
+    }
+
+    func togglePanelDetached() {
+        isPanelDetached.toggle()
     }
 
     /// Compatibility alias for the note currently in the viewer.

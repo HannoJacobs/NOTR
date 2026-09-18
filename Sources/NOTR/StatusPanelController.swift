@@ -25,6 +25,22 @@ final class StatusPanelController: NSObject, NSWindowDelegate {
     private var isPresented = false
     private var isSyncingSize = false
 
+    /// Top-left of the free-floating window, persisted across launches. Top-left (not
+    /// origin) because NOTR resizes itself to its content: anchoring the top-left means
+    /// a longer note grows downward instead of shoving the window up the screen.
+    private var detachedTopLeft: NSPoint?
+
+    /// Window top-left captured at mouse-down so a drag tracks the cursor 1:1.
+    private var dragStartTopLeft: NSPoint?
+
+    /// How far the grip must travel before an anchored panel tears off the menu bar.
+    private static let detachThreshold: CGFloat = 8
+    /// Keep at least this much of the window reachable while dragging.
+    private static let onScreenMargin: CGFloat = 80
+
+    private static let detachedXKey = "notr.panelDetachedX"
+    private static let detachedYKey = "notr.panelDetachedY"
+
     private let shadowMargin: CGFloat = 10
 
     init(appState: AppState) {
@@ -33,6 +49,10 @@ final class StatusPanelController: NSObject, NSWindowDelegate {
         appState.onPanelPinnedChanged = { [weak self] pinned in
             self?.handlePinChanged(pinned)
         }
+        appState.onPanelDetachChanged = { [weak self] detached in
+            self?.handleDetachChanged(detached)
+        }
+        loadDetachedPosition()
     }
 
     func install() {
@@ -77,12 +97,20 @@ final class StatusPanelController: NSObject, NSWindowDelegate {
         }
 
         appState.pruneMissingNotes()
-        refreshAnchorFromStatusItem()
+        if appState.isPanelDetached {
+            // Seed a first-run position if the app launched already detached.
+            if detachedTopLeft == nil {
+                refreshAnchorFromStatusItem()
+                detachedTopLeft = NSPoint(x: anchorCenterX - panel.frame.width / 2, y: anchorTopY)
+            }
+        } else {
+            refreshAnchorFromStatusItem()
+        }
 
         syncContentSize()
-        pinToAnchor()
+        positionPanel()
         panel.alphaValue = 1
-        panel.level = appState.isPanelPinned ? .floating : .popUpMenu
+        applyWindowLevel()
         NSApp.activate(ignoringOtherApps: true)
         panel.makeKeyAndOrderFront(nil)
         isPresented = true
@@ -172,6 +200,28 @@ final class StatusPanelController: NSObject, NSWindowDelegate {
         }
     }
 
+    /// Single entry point for placing the window: detached uses its own remembered
+    /// top-left, anchored keeps the existing under-the-icon behaviour.
+    private func positionPanel() {
+        guard let panel else { return }
+        guard appState.isPanelDetached, let topLeft = detachedTopLeft else {
+            pinToAnchor()
+            return
+        }
+        let size = panel.frame.size
+        var origin = NSPoint(x: topLeft.x, y: topLeft.y - size.height)
+        if let visible = screenContaining(topLeft)?.visibleFrame ?? screenForEdgeClamp()?.visibleFrame {
+            origin = clampOrigin(origin, size: size, to: visible)
+        }
+        panel.setFrameOrigin(origin)
+    }
+
+    private func applyWindowLevel() {
+        guard let panel else { return }
+        // Detached always floats: it is explicitly parked on top of other work.
+        panel.level = (appState.isPanelPinned || appState.isPanelDetached) ? .floating : .popUpMenu
+    }
+
     private func pinToAnchor() {
         guard let panel else { return }
         let size = panel.frame.size
@@ -216,7 +266,7 @@ final class StatusPanelController: NSObject, NSWindowDelegate {
     // Reposition (origin only) after AppKit resizes the window; never resize here (no loop).
     func windowDidResize(_ notification: Notification) {
         guard isPresented, !isSyncingSize else { return }
-        pinToAnchor()
+        positionPanel()
     }
 
     // Dismiss rules (when NOT pinned):
@@ -239,8 +289,11 @@ final class StatusPanelController: NSObject, NSWindowDelegate {
             queue: .main
         ) { [weak self] _ in
             guard let self else { return }
-            if self.appState.isPanelPinned {
-                Log.info("app resigned active; staying open (pinned)", "controller")
+            if self.appState.isPanelPinned || self.appState.isPanelDetached {
+                Log.info(
+                    "app resigned active; staying open (\(self.appState.isPanelDetached ? "detached" : "pinned"))",
+                    "controller"
+                )
                 return
             }
             Log.info("app resigned active; dismissing panel", "controller")
@@ -267,13 +320,13 @@ final class StatusPanelController: NSObject, NSWindowDelegate {
 
     private func handlePinChanged(_ pinned: Bool) {
         guard isPresented else { return }
+        // Detached already floats and never auto-dismisses; pin is inert there.
+        guard !appState.isPanelDetached else { return }
+        applyWindowLevel()
         if pinned {
-            // Keep floating above other apps while the user works elsewhere.
-            panel?.level = .floating
             panel?.orderFrontRegardless()
             Log.info("panel pinned; auto-dismiss disabled", "controller")
         } else {
-            panel?.level = .popUpMenu
             Log.info("panel unpinned; auto-dismiss re-enabled", "controller")
             // If they unpinned after switching away, close like a normal menu-bar item.
             if NSApp.isActive == false {
@@ -282,12 +335,86 @@ final class StatusPanelController: NSObject, NSWindowDelegate {
         }
     }
 
+    // MARK: - Dragging / detaching
+
+    /// Grip mouse-down: remember where the window's top-left was.
+    func beginPanelDrag() {
+        guard let panel else { return }
+        dragStartTopLeft = NSPoint(x: panel.frame.minX, y: panel.frame.maxY)
+    }
+
+    /// Grip drag: detach past the threshold, then follow the cursor 1:1.
+    func updatePanelDrag(translation: CGSize) {
+        guard let panel, let start = dragStartTopLeft else { return }
+
+        if !appState.isPanelDetached {
+            guard hypot(translation.width, translation.height) > Self.detachThreshold else { return }
+            // Tear off exactly where the panel already sits, so it does not jump
+            // under the cursor at the moment of detaching.
+            detachedTopLeft = start
+            appState.isPanelDetached = true
+        }
+
+        let size = panel.frame.size
+        var topLeft = NSPoint(x: start.x + translation.width, y: start.y + translation.height)
+
+        if let visible = (screenContaining(NSEvent.mouseLocation) ?? screenForEdgeClamp())?.visibleFrame {
+            topLeft.x = min(max(topLeft.x, visible.minX - size.width + Self.onScreenMargin),
+                            visible.maxX - Self.onScreenMargin)
+            topLeft.y = min(max(topLeft.y, visible.minY + Self.onScreenMargin), visible.maxY)
+        }
+
+        detachedTopLeft = topLeft
+        panel.setFrameOrigin(NSPoint(x: topLeft.x, y: topLeft.y - size.height))
+    }
+
+    func endPanelDrag() {
+        dragStartTopLeft = nil
+        saveDetachedPosition()
+    }
+
+    private func handleDetachChanged(_ detached: Bool) {
+        if detached, detachedTopLeft == nil, let panel {
+            detachedTopLeft = NSPoint(x: panel.frame.minX, y: panel.frame.maxY)
+        }
+        if !detached {
+            refreshAnchorFromStatusItem()
+        }
+        saveDetachedPosition()
+        applyWindowLevel()
+        positionPanel()
+        if isPresented {
+            panel?.orderFrontRegardless()
+        }
+        Log.info(
+            detached ? "panel detached; free-floating above other apps" : "panel reattached to the menu bar",
+            "controller"
+        )
+    }
+
+    private func loadDetachedPosition() {
+        let defaults = UserDefaults.standard
+        guard defaults.object(forKey: Self.detachedXKey) != nil,
+              defaults.object(forKey: Self.detachedYKey) != nil
+        else { return }
+        detachedTopLeft = NSPoint(
+            x: CGFloat(defaults.double(forKey: Self.detachedXKey)),
+            y: CGFloat(defaults.double(forKey: Self.detachedYKey))
+        )
+    }
+
+    private func saveDetachedPosition() {
+        guard let detachedTopLeft else { return }
+        UserDefaults.standard.set(Double(detachedTopLeft.x), forKey: Self.detachedXKey)
+        UserDefaults.standard.set(Double(detachedTopLeft.y), forKey: Self.detachedYKey)
+    }
+
     /// Close when the user clicks a DIFFERENT menu-bar item, so it doesn't open underneath
     /// NOTR. Deliberately ignores non-menu-bar outside clicks so the emoji/character viewer
     /// (a non-activating panel below the menu bar) keeps working.
     private func dismissIfMenuBarClick() {
         guard isPresented, let panel else { return }
-        if appState.isPanelPinned { return }
+        if appState.isPanelPinned || appState.isPanelDetached { return }
 
         let point = NSEvent.mouseLocation
 
@@ -324,9 +451,14 @@ final class StatusPanelController: NSObject, NSWindowDelegate {
                 guard let self else { return }
                 DispatchQueue.main.async {
                     self.syncContentSize()
-                    self.pinToAnchor()
+                    self.positionPanel()
                 }
-            }
+            },
+            dragActions: PanelDragActions(
+                began: { [weak self] in self?.beginPanelDrag() },
+                changed: { [weak self] translation in self?.updatePanelDrag(translation: translation) },
+                ended: { [weak self] in self?.endPanelDrag() }
+            )
         )
         .environment(appState)
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -347,7 +479,7 @@ final class StatusPanelController: NSObject, NSWindowDelegate {
         )
         panel.contentViewController = hosting
         panel.isFloatingPanel = true
-        panel.level = appState.isPanelPinned ? .floating : .popUpMenu
+        panel.level = (appState.isPanelPinned || appState.isPanelDetached) ? .floating : .popUpMenu
         panel.hidesOnDeactivate = false
         panel.isReleasedWhenClosed = false
         panel.isOpaque = false
