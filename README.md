@@ -12,6 +12,7 @@ Menu-bar quick viewer for text notes on macOS. Pin a few files you look at often
 - Drag the corner handle to resize — size is sticky per file
 - Drag rows to reorder; right-click → remove from NOTR (does not delete the file)
 - Missing files are pruned automatically
+- Drag the grip to detach the panel into a floating window; it is always kept on a connected display — unplugging the monitor it sat on moves it onto the nearest remaining one
 - Follows system light/dark appearance
 
 ## Dev run

@@ -53,6 +53,25 @@ final class StatusPanelController: NSObject, NSWindowDelegate {
             self?.handleDetachChanged(detached)
         }
         loadDetachedPosition()
+        // Displays plugged in / unplugged / rearranged: re-place the panel so it can
+        // never be left on a monitor that no longer exists.
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(screenParametersChanged(_:)),
+            name: NSApplication.didChangeScreenParametersNotification,
+            object: nil
+        )
+    }
+
+    @objc private func screenParametersChanged(_ notification: Notification) {
+        Log.info("screen parameters changed; screens=\(NSScreen.screens.count)", "controller")
+        // The cached click screen may be the display that was just unplugged.
+        anchorScreen = nil
+        guard isPresented else { return }
+        if !appState.isPanelDetached {
+            refreshAnchorFromStatusItem()
+        }
+        positionPanel()
     }
 
     func install() {
@@ -209,11 +228,54 @@ final class StatusPanelController: NSObject, NSWindowDelegate {
             return
         }
         let size = panel.frame.size
-        var origin = NSPoint(x: topLeft.x, y: topLeft.y - size.height)
-        if let visible = screenContaining(topLeft)?.visibleFrame ?? screenForEdgeClamp()?.visibleFrame {
-            origin = clampOrigin(origin, size: size, to: visible)
+        guard let placed = Self.resolveDetachedTopLeft(
+            topLeft,
+            visibleFrames: NSScreen.screens.map(\.visibleFrame)
+        ) else {
+            panel.setFrameOrigin(NSPoint(x: topLeft.x, y: topLeft.y - size.height))
+            return
         }
-        panel.setFrameOrigin(origin)
+        if placed.topLeft != topLeft {
+            Log.info(
+                "detached position \(topLeft) not fully on a connected display; placed at \(placed.topLeft)",
+                "controller"
+            )
+            detachedTopLeft = placed.topLeft
+            saveDetachedPosition()
+        }
+        let origin = NSPoint(x: placed.topLeft.x, y: placed.topLeft.y - size.height)
+        panel.setFrameOrigin(clampOrigin(origin, size: size, to: placed.visibleFrame))
+    }
+
+    /// Where a detached panel's top-left may sit, given the displays connected *right
+    /// now*. A saved position is just screen coordinates: after a monitor is unplugged it
+    /// can point at a display that no longer exists, leaving the window unreachable. Picks
+    /// the display under the corner, else the nearest one, and clamps so at least the
+    /// panel's minimum footprint (300×160) is on it. Size-independent on purpose, so the
+    /// correction can be persisted without a long note permanently shifting the window.
+    static func resolveDetachedTopLeft(
+        _ topLeft: NSPoint,
+        visibleFrames: [NSRect]
+    ) -> (topLeft: NSPoint, visibleFrame: NSRect)? {
+        let corner = NSPoint(x: topLeft.x + 1, y: topLeft.y - 1)
+        func distance(_ rect: NSRect) -> CGFloat {
+            hypot(max(rect.minX - corner.x, 0, corner.x - rect.maxX),
+                  max(rect.minY - corner.y, 0, corner.y - rect.maxY))
+        }
+        guard let visible = visibleFrames.first(where: { $0.contains(corner) })
+            ?? visibleFrames.min(by: { distance($0) < distance($1) })
+        else { return nil }
+
+        let inset: CGFloat = 8
+        let minX = visible.minX + inset
+        let maxX = max(minX, visible.maxX - 300 - inset)
+        let minTop = visible.minY + 160 + inset
+        let maxTop = max(minTop, visible.maxY - 2)
+        let placed = NSPoint(
+            x: min(max(topLeft.x, minX), maxX),
+            y: min(max(topLeft.y, minTop), maxTop)
+        )
+        return (placed, visible)
     }
 
     private func applyWindowLevel() {

@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.2
+
+- Fixed a detached panel getting stranded when the monitor it was parked on is unplugged. NOTR never reacted to a display disconnecting, so an open detached window stayed at coordinates on a display that no longer existed — and because a detached panel never auto-dismisses, the only way back was an unobvious double click on the menu-bar icon (hide, then show).
+- Even that recovery was unreliable: when the saved top-left was on no display, placement fell back to `anchorScreen`, the cached screen of the last status-item click. If that click had been on the external monitor's menu bar, the fallback was the very display that had just been unplugged.
+- The stranded coordinates were also never corrected, so they stayed in `UserDefaults` and every later show had to rescue them again.
+- New `resolveDetachedTopLeft` is the single placement rule for detached mode: it considers only the displays connected right now, picks the one under the window's top-left, otherwise the nearest remaining one (so with three monitors the panel lands next to the unplugged one), and clamps so at least the panel's 300×160 minimum footprint is visible.
+- The correction is size-independent on purpose, so it can be persisted without a long note permanently shifting the window up; the existing content-size clamp still keeps the full window on screen for each show and resize. Any correction is saved and logged with before/after coordinates.
+- NOTR now observes `NSApplication.didChangeScreenParametersNotification`: plugging, unplugging or rearranging displays drops the cached click screen and re-places an open panel immediately — detached panels are rescued, anchored panels re-read the status item's current display.
+- Verified live: with a saved detached top-left of `(1047, 2500)` on a laptop whose visible frame tops out around 949pt, the fixed build logged the rescue, showed the panel at `(1047, 947)` on the built-in display and persisted the corrected position.
+- No change to anchored placement, pinning, drag-to-detach, or the dismiss rules for non-detached panels.
+- Packaging / full-send: bump CFBundle version to `1.2`, ship `NOTR.dmg` on GitHub release `v1.2`, and reinstall `/Applications/NOTR.app` with launch-log proof for version/build `1.2`.
+
 ## 1.1
 
 - Moved the pin-list toolbar from the bottom of the panel to the top, so the drag grip, detach, settings, new-note and Quit controls sit above the list of notes instead of below it.
