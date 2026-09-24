@@ -215,8 +215,8 @@ final class AppState {
     }
 
     func updateSize(for noteID: UUID, width: CGFloat, height: CGFloat) {
-        let clampedWidth = max(280, min(900, Double(width)))
-        let clampedHeight = max(180, min(900, Double(height)))
+        let clampedWidth = max(PinnedNote.minimumWidth, Double(width))
+        let clampedHeight = max(PinnedNote.minimumHeight, Double(height))
 
         if var open = openNote, open.id == noteID {
             if abs(open.width - clampedWidth) >= 1 || abs(open.height - clampedHeight) >= 1 {

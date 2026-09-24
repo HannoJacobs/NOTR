@@ -3,10 +3,10 @@ import SwiftUI
 struct NoteViewerView: View {
     @Environment(AppState.self) private var appState
     let note: PinnedNote
+    @Binding var panelWidth: CGFloat
+    @Binding var panelHeight: CGFloat
     var onSizeChanged: (() -> Void)? = nil
 
-    @State private var panelWidth: CGFloat = 420
-    @State private var panelHeight: CGFloat = 360
     @State private var dragStartSize: CGSize?
 
     var body: some View {
@@ -20,14 +20,6 @@ struct NoteViewerView: View {
             }
         }
         .frame(width: panelWidth)
-        .onAppear {
-            panelWidth = CGFloat(note.width)
-            panelHeight = CGFloat(note.height)
-        }
-        .onChange(of: note.id) { _, _ in
-            panelWidth = CGFloat(note.width)
-            panelHeight = CGFloat(note.height)
-        }
     }
 
     private var pathBar: some View {
@@ -101,8 +93,8 @@ struct NoteViewerView: View {
                             dragStartSize = CGSize(width: panelWidth, height: panelHeight)
                         }
                         guard let start = dragStartSize else { return }
-                        panelWidth = min(900, max(280, start.width + value.translation.width))
-                        panelHeight = min(900, max(180, start.height + value.translation.height))
+                        panelWidth = max(CGFloat(PinnedNote.minimumWidth), start.width + value.translation.width)
+                        panelHeight = max(CGFloat(PinnedNote.minimumHeight), start.height + value.translation.height)
                         onSizeChanged?()
                     }
                     .onEnded { _ in

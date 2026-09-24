@@ -210,9 +210,6 @@ final class StatusPanelController: NSObject, NSWindowDelegate {
             Log.error("suspicious fittingSize=\(fit); using fallback", "controller")
             fit = NSSize(width: 340, height: 280)
         }
-        fit.width = min(max(fit.width, 300), 1000)
-        fit.height = min(max(fit.height, 160), 1000)
-
         if panel.frame.size != fit {
             panel.setContentSize(fit)
             Log.info("panel resized to \(fit)", "controller")

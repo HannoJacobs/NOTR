@@ -1,6 +1,11 @@
 import Foundation
 
 struct PinnedNote: Identifiable, Codable, Equatable, Hashable {
+    /// Enough room for roughly two short words in the monospaced editor.
+    static let minimumWidth: Double = 110
+    /// Keeps one editable line and the resize handle reachable.
+    static let minimumHeight: Double = 48
+
     var id: UUID
     var path: String
     var width: Double

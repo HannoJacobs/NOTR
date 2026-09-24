@@ -13,6 +13,8 @@ struct MenuBarView: View {
     @State private var dragOriginIndex: Int?
     @State private var dragTargetIndex: Int?
     @State private var dragTranslation: CGFloat = 0
+    @State private var noteWidth: CGFloat = 420
+    @State private var noteHeight: CGFloat = 360
 
     private let rowHeight: CGFloat = 52
 
@@ -25,6 +27,8 @@ struct MenuBarView: View {
                 Divider()
                 NoteViewerView(
                     note: note,
+                    panelWidth: $noteWidth,
+                    panelHeight: $noteHeight,
                     onSizeChanged: { onContentSizeMayHaveChanged?() }
                 )
                 .environment(appState)
@@ -35,9 +39,17 @@ struct MenuBarView: View {
         .background(Color(nsColor: .windowBackgroundColor))
         .onAppear {
             appState.pruneMissingNotes()
+            if let note = appState.selectedNote {
+                noteWidth = CGFloat(note.width)
+                noteHeight = CGFloat(note.height)
+            }
             onContentSizeMayHaveChanged?()
         }
         .onChange(of: appState.openNote?.id) { _, _ in
+            if let note = appState.selectedNote {
+                noteWidth = CGFloat(note.width)
+                noteHeight = CGFloat(note.height)
+            }
             DispatchQueue.main.async { onContentSizeMayHaveChanged?() }
         }
         .onChange(of: appState.isOpenNotePinned) { _, _ in
@@ -52,51 +64,56 @@ struct MenuBarView: View {
     }
 
     private var noteHeader: some View {
-        HStack(spacing: 8) {
-            Button {
-                appState.clearSelection()
-            } label: {
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 12, weight: .semibold))
-                    .frame(width: 28, height: 28)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(NotrIconButtonStyle())
-            .help("Back to pin list")
-
-            Text(appState.selectedNote?.displayName ?? "")
-                .font(.system(size: 13, weight: .semibold))
-                .lineLimit(1)
-                .truncationMode(.middle)
-
-            Spacer(minLength: 8)
-
-            listMembershipButton
-
-            dragGrip
-
-            if !appState.isPanelDetached {
-                pinToggleButton
-            }
-            detachToggleButton
-
-            if appState.isUntitledDraft {
-                saveDraftButton
-            } else {
+        ScrollView(.horizontal) {
+            HStack(spacing: 8) {
                 Button {
-                    appState.reloadSelectedContent()
+                    appState.clearSelection()
                 } label: {
-                    Image(systemName: "arrow.clockwise")
-                        .font(.system(size: 12, weight: .medium))
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 12, weight: .semibold))
                         .frame(width: 28, height: 28)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(NotrIconButtonStyle())
-                .help("Reload file")
+                .help("Back to pin list")
+
+                Text(appState.selectedNote?.displayName ?? "")
+                    .font(.system(size: 13, weight: .semibold))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .frame(maxWidth: 200, alignment: .leading)
+
+                Spacer(minLength: 8)
+
+                listMembershipButton
+
+                dragGrip
+
+                if !appState.isPanelDetached {
+                    pinToggleButton
+                }
+                detachToggleButton
+
+                if appState.isUntitledDraft {
+                    saveDraftButton
+                } else {
+                    Button {
+                        appState.reloadSelectedContent()
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 12, weight: .medium))
+                            .frame(width: 28, height: 28)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(NotrIconButtonStyle())
+                    .help("Reload file")
+                }
             }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .frame(minWidth: noteWidth)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
+        .frame(width: noteWidth)
     }
 
     private var saveDraftButton: some View {

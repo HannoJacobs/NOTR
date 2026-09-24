@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.3
+
+- Fixed the note body appearing narrower than its window during resize. The header previously had enough intrinsic width to enlarge the fitted AppKit panel, while the editor kept a separate note width. The header and editor now use one live width during the drag.
+- The note header is a horizontal scroll viewport sized to that same width. A narrow note can show its back button and title first, then scroll across to list membership, drag, pin, detach, and reload or save controls without forcing the window wider.
+- Kept the existing wide-header arrangement: when there is room, the title stays at the left and actions sit at the right. The scrolling behavior only becomes relevant when the controls need more space than the note provides.
+- Lowered the practical note-width floor from 280 points to 110 points, enough for roughly two short words in the monospaced editor. The note-body height floor is 48 points so one editable line and the resize corner remain reachable.
+- Removed the fixed 900-point maximum from the resize gesture and saved note dimensions. Notes can grow with the user’s drag instead of stopping at a preset width or height.
+- Removed the separate 300–1000-point width and 160–1000-point height clamps in the panel controller. Those clamps could silently make the outer window larger or smaller than the note view even after the drag size was correct.
+- Preserved per-note size persistence and the existing editor, autosave, pin, detach, and reload actions. The note size is still saved when the resize drag ends; the new size limits apply consistently to the gesture and saved state.
+- Verified the debug app with a disposable note: at 110 points, two short words fit and the trailing header actions were reachable by horizontal scrolling; dragging the corner from narrow to wide resized the panel and text area together. A 650-point note kept its controls aligned at the right.
+- Packaging / full-send: bump CFBundle version and build to `1.3`, publish the matching `NOTR.dmg` on GitHub release `v1.3`, and install and launch `/Applications/NOTR.app` with log proof for version/build `1.3`.
+
 ## 1.2
 
 - Fixed a detached panel getting stranded when the monitor it was parked on is unplugged. NOTR never reacted to a display disconnecting, so an open detached window stayed at coordinates on a display that no longer existed — and because a detached panel never auto-dismisses, the only way back was an unobvious double click on the menu-bar icon (hide, then show).
