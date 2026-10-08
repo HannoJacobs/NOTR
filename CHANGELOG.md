@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.4
+
+- Fixed an empty "NOTR Settings" window appearing on screen. NOTR was started through the SwiftUI `App` lifecycle, which requires at least one scene, and the only scene it declared was an empty `Settings { EmptyView() }` placeholder kept just to satisfy that requirement. Whenever macOS reopened the running app (launching it again from Finder, Spotlight, `open -a`, or a login item firing while it was already running), SwiftUI presented that placeholder as a large blank, titled window behind the menu-bar panel.
+- Root cause: the placeholder scene was never meant to be shown, but SwiftUI treats it as the app's one real window. Nothing in NOTR ever opened it on purpose; the reopen path alone was enough.
+- NOTR now starts from a plain AppKit `main.swift` (`NSApplication.shared.run()` with the existing `NOTRAppDelegate`) and declares no SwiftUI scene at all, so there is no window that can surface. `NOTRApp.swift` is deleted. The status item, the panel, and every SwiftUI view inside the panel are unchanged; the in-panel Settings view is a normal SwiftUI view and keeps working.
+- Kept keyboard shortcuts working: the SwiftUI lifecycle used to install a hidden main menu, and key equivalents such as ⌘C, ⌘V, ⌘X, ⌘Z, ⇧⌘Z, ⌘A and ⌘Q are dispatched through that menu. `main.swift` now installs an equivalent hidden menu (app menu with Quit, plus an Edit menu with Undo, Redo, Cut, Copy, Paste and Select All), so text editing and copying behave exactly as before.
+- NOTR is the sibling where this matters most because notes are typed into the panel: without the hidden Edit menu, copy, paste, cut, undo and select-all in the note editor would have silently stopped working.
+- `install-release.sh` no longer requires ripgrep (`rg`), which is not installed on this Mac and made the installer stop before installing anything. The launch-log verification now uses the built-in `grep -E` with the same pattern, so the required evidence line (`applicationDidFinishLaunching ... version=X build=Y bundlePath=/Applications/NOTR.app`) is still enforced.
+- The same fix (plain AppKit entry point, hidden Edit menu, grep instead of rg) was made in the menu-bar app template these apps come from, and in the new sibling app LIMTR, so the bug does not come back in future apps.
+- Verified locally: the build passes, the installed app launches from `/Applications/NOTR.app`, and reopening the already-running app no longer produces any window other than the menu-bar panel.
+- Packaging / full-send: bump CFBundle version from `1.3` to `1.4`, ship `NOTR.dmg` on GitHub release `v1.4`, and reinstall `/Applications/NOTR.app` with launch-log proof for version/build `1.4`.
+
 ## 1.3
 
 - Fixed the note body appearing narrower than its window during resize. The header previously had enough intrinsic width to enlarge the fitted AppKit panel, while the editor kept a separate note width. The header and editor now use one live width during the drag.
