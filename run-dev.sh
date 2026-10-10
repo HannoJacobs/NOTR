@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 APP_NAME="NOTR"
-BUILD_DIR="$SCRIPT_DIR/build-dev"
+BUILD_DIR="$SCRIPT_DIR/build-dev.noindex"
 APP_PATH="$BUILD_DIR/$APP_NAME.app"
 BINARY_SRC=""
 
