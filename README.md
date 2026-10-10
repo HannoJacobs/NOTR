@@ -30,3 +30,6 @@ Menu-bar quick viewer for text notes on macOS. Pin a few files you look at often
 ```
 
 Then upload `NOTR.dmg` to the matching GitHub release tag.
+
+Release app bundles and archives are kept in `build-release.noindex` so they do not appear as extra apps in Spotlight. DMG staging is removed on exit; `install-release.sh` uses the retained signed app from that directory.
+Development app bundles use `build-dev.noindex` for the same reason.

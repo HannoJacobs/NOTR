@@ -1,6 +1,8 @@
 .build/
 build-dev/
 build-release/
+build-release.noindex/
+build-dev.noindex/
 *.dmg
 .DS_Store
 .swiftpm/
