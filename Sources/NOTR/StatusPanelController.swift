@@ -94,7 +94,7 @@ final class StatusPanelController: NSObject, NSWindowDelegate {
 
     @objc private func statusItemClicked(_ sender: Any?) {
         Log.info("status item clicked isPresented=\(isPresented)", "controller")
-        if isPresented {
+        if isPresented || panel?.isVisible == true {
             hide()
         } else {
             show()
@@ -130,12 +130,12 @@ final class StatusPanelController: NSObject, NSWindowDelegate {
         positionPanel()
         panel.alphaValue = 1
         applyWindowLevel()
-        NSApp.activate(ignoringOtherApps: true)
-        panel.makeKeyAndOrderFront(nil)
         isPresented = true
         installDismissObserver()
+        NSApp.activate(ignoringOtherApps: true)
+        panel.makeKeyAndOrderFront(nil)
         Log.info(
-            "panel shown size=\(panel.frame.size) origin=\(panel.frame.origin) anchor=(\(anchorCenterX),\(anchorTopY)) screen=\(anchorScreenDescription()) pinned=\(appState.isPanelPinned)",
+            "panel shown size=\(panel.frame.size) origin=\(panel.frame.origin) anchor=(\(anchorCenterX),\(anchorTopY)) screen=\(anchorScreenDescription()) pinned=\(appState.isPanelPinned) detached=\(appState.isPanelDetached)",
             "controller"
         )
     }
@@ -188,7 +188,7 @@ final class StatusPanelController: NSObject, NSWindowDelegate {
     }
 
     func hide() {
-        guard isPresented else { return }
+        guard isPresented || panel?.isVisible == true else { return }
         appState.flushPendingSaveIfNeeded()
         removeDismissObserver()
         panel?.orderOut(nil)
@@ -326,6 +326,16 @@ final class StatusPanelController: NSObject, NSWindowDelegate {
     func windowDidResize(_ notification: Notification) {
         guard isPresented, !isSyncingSize else { return }
         positionPanel()
+    }
+
+    func windowDidBecomeKey(_ notification: Notification) {
+        guard let panel, notification.object as? NSWindow === panel,
+              !isPresented, panel.isVisible else { return }
+        // Recover monitoring if AppKit presents the retained window outside show().
+        // A visible panel must never be left without its dismissal handlers.
+        isPresented = true
+        installDismissObserver()
+        Log.info("panel presentation recovered; auto-dismiss monitoring restored", "controller")
     }
 
     // Dismiss rules (when NOT pinned):
