@@ -18,6 +18,14 @@ final class NOTRAppDelegate: NSObject, NSApplicationDelegate {
         Log.info("applicationWillTerminate \(Log.runtimeSummary)", "app")
     }
 
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        // AppKit may otherwise show the retained panel itself, bypassing show()
+        // and leaving a visible window without dismissal observers.
+        Log.info("application reopen; presenting through panel controller", "app")
+        panelController?.show()
+        return false
+    }
+
     private func installCrashLogging() {
         NSSetUncaughtExceptionHandler { exception in
             Log.error(

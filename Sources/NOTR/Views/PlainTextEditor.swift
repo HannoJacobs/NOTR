@@ -98,10 +98,16 @@ struct PlainTextEditor: NSViewRepresentable {
         func focusIfNeeded(scrollView: NSScrollView, textView: NSTextView, token: UUID?) {
             guard let token, token != lastFocusToken else { return }
             lastFocusToken = token
-            DispatchQueue.main.async {
-                guard let window = scrollView.window else { return }
-                NSApp.activate(ignoringOtherApps: true)
-                window.makeKeyAndOrderFront(nil)
+            DispatchQueue.main.async { [weak self, weak scrollView, weak textView] in
+                // Focus is deferred until SwiftUI has attached the editor. The user
+                // may dismiss the panel or open a dialog before this block runs.
+                // Only the panel controller may present it; focus must never reopen it.
+                guard let self, self.lastFocusToken == token,
+                      let scrollView, let textView,
+                      let window = scrollView.window,
+                      textView.window === window,
+                      window.isVisible, window.isKeyWindow, NSApp.isActive
+                else { return }
                 window.makeFirstResponder(textView)
                 Log.info("editor focused token=\(token.uuidString.prefix(8))", "editor")
             }

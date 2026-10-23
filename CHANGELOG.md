@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.6
+
+- Fixed a sticky menu-bar panel that could remain visible after clicking outside, even with the panel pin turned off and the note list showing. The window could be visible while the controller considered it hidden and had already removed its dismissal handlers.
+- Deferred note-editor focus previously activated NOTR and called `makeKeyAndOrderFront`. If a dismissal happened before that queued work ran, focus could present the retained window again without going through the panel controller's normal show path.
+- Editor focus now only makes the text view first responder when its window is already visible, key, and in the active application. A focus request cannot show a hidden panel, reactivate the application, or take the keyboard away from a native file dialog.
+- Queued focus also checks that its token is still current and that the editor still belongs to the intended window. Superseded requests and callbacks for removed editors are ignored; the deferred focus needed when opening a note remains available.
+- The panel controller installs its dismissal handlers before activating and presenting the window. If AppKit makes the retained panel key outside that normal path, the controller recovers its presentation state and restores the handlers, with a diagnostic log entry.
+- Reopening NOTR from Finder, Spotlight, or `open` now explicitly uses the panel controller's show path. AppKit cannot silently reopen the retained panel with its normal window-reopen behavior and bypass the dismissal lifecycle.
+- Explicit hide and the menu-bar toggle also consult the real window visibility. A mismatch in internal presentation state can no longer make the hide action ignore a visible panel. Show logs now include both panel-pin and detached state for diagnosis.
+- Kept the existing dismissal rules: app deactivation and clicks on other menu-bar items close an anchored, unpinned panel; pinned and detached panels remain open. Character Viewer interaction continues to use the existing nonactivating-panel exception.
+- Added focused AppKit regression tests for hidden-window focus and a dismissal racing queued focus. These exercise actual window visibility after the deferred callback runs. Foreground keyboard focus and native-dialog interaction require the running app because the command-line XCTest host does not activate as a normal application.
+- Version and build advance to 1.6. The release uses the existing signed archive, DMG packaging, GitHub release, and installation workflow, with fresh launch-log evidence required from `/Applications/NOTR.app` and live dismissal checks on the installed build.
+
 
 ## 1.5
 

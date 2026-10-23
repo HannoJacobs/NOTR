@@ -12,6 +12,7 @@ let package = Package(
             name: "NOTR",
             path: "Sources/NOTR",
             exclude: ["Info.plist"]
-        )
+        ),
+        .testTarget(name: "NOTRTests", dependencies: ["NOTR"])
     ]
 )
