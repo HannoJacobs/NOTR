@@ -41,7 +41,7 @@ final class EditorFocusTests: XCTestCase {
         window.contentView = scrollView
         let textView = scrollView.documentView as! NSTextView
         let editor = PlainTextEditor(text: .constant(""), isLineWrappingEnabled: true,
-                                     onTextChange: { _ in }, focusToken: nil)
+                                     focusToken: nil)
         return (window, scrollView, textView, editor.makeCoordinator())
     }
 

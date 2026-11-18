@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.7
+
+- Fixed a redraw issue that could briefly blank the final line of a note when inserting or deleting text higher up. The line could return as the editor settled, even though its text remained in the note.
+- The editor previously reassigned its font and foreground color on each SwiftUI update. AppKit treated those assignments as edits to the entire document, including updates where the note text and appearance were identical.
+- The AppKit editor now sets its monospaced font, system label color and caret color during creation. Ordinary typing and save-status updates leave those attributes alone, so unchanged text can keep its existing layout.
+- Wrapping is configured when an editor opens and when the preference changes. Turning it back on fits the text to the visible pane immediately. The text container then tracks the editor width as the panel resizes, and unwrapped mode still supports horizontal scrolling.
+- Each AppKit text change now goes through the note binding once. The existing draft and autosave behavior uses that binding to keep the model and disk in sync.
+- The native editor still accepts model text when opening or reloading a note. It retains the existing selection and deferred-focus handling.
+- Added a SwiftUI hosting regression that updates an existing editor with identical text and a new focus token. The previous code reported two full-document AppKit attribute edits. The updated editor retains the text and reports zero attribute edits.
+- Version and build advance to 1.7. The corresponding NOTR.dmg contains the signed Release app and uses the existing install workflow.
+
 ## 1.6
 
 - Fixed a sticky menu-bar panel that could remain visible after clicking outside, even with the panel pin turned off and the note list showing. The window could be visible while the controller considered it hidden and had already removed its dismissal handlers.
