@@ -4,7 +4,6 @@ import SwiftUI
 struct PlainTextEditor: NSViewRepresentable {
     @Binding var text: String
     var isLineWrappingEnabled: Bool
-    var onTextChange: (String) -> Void
     /// When this value changes, the text view becomes first responder.
     var focusToken: UUID?
 
@@ -15,7 +14,6 @@ struct PlainTextEditor: NSViewRepresentable {
     func makeNSView(context: Context) -> NSScrollView {
         let scrollView = NSTextView.scrollableTextView()
         scrollView.hasVerticalScroller = true
-        scrollView.hasHorizontalScroller = true
         scrollView.autohidesScrollers = true
         scrollView.borderType = .noBorder
         scrollView.drawsBackground = false
@@ -36,6 +34,8 @@ struct PlainTextEditor: NSViewRepresentable {
         textView.insertionPointColor = .labelColor
         textView.backgroundColor = .clear
         textView.drawsBackground = false
+        textView.minSize = .zero
+        textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
         textView.string = text
         applyWrapping(textView, enabled: isLineWrappingEnabled, in: scrollView)
         context.coordinator.focusIfNeeded(scrollView: scrollView, textView: textView, token: focusToken)
@@ -43,8 +43,13 @@ struct PlainTextEditor: NSViewRepresentable {
     }
 
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
+        let wrappingChanged = context.coordinator.parent.isLineWrappingEnabled != isLineWrappingEnabled
         context.coordinator.parent = self
         guard let textView = scrollView.documentView as? NSTextView else { return }
+
+        if wrappingChanged {
+            applyWrapping(textView, enabled: isLineWrappingEnabled, in: scrollView)
+        }
 
         if textView.string != text {
             let selected = textView.selectedRanges
@@ -52,10 +57,6 @@ struct PlainTextEditor: NSViewRepresentable {
             textView.selectedRanges = selected
         }
 
-        applyWrapping(textView, enabled: isLineWrappingEnabled, in: scrollView)
-        textView.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
-        textView.textColor = .labelColor
-        textView.insertionPointColor = .labelColor
         context.coordinator.focusIfNeeded(scrollView: scrollView, textView: textView, token: focusToken)
     }
 
@@ -65,13 +66,13 @@ struct PlainTextEditor: NSViewRepresentable {
         if enabled {
             scrollView.hasHorizontalScroller = false
             textView.isHorizontallyResizable = false
+            // An unwrapped document can be wider than the viewport.
+            textView.setFrameSize(NSSize(width: scrollView.contentSize.width, height: textView.frame.height))
             container.widthTracksTextView = true
             container.containerSize = NSSize(
                 width: scrollView.contentSize.width,
                 height: CGFloat.greatestFiniteMagnitude
             )
-            textView.minSize = .zero
-            textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
             textView.autoresizingMask = [.width]
         } else {
             scrollView.hasHorizontalScroller = true
@@ -81,8 +82,6 @@ struct PlainTextEditor: NSViewRepresentable {
                 width: CGFloat.greatestFiniteMagnitude,
                 height: CGFloat.greatestFiniteMagnitude
             )
-            textView.minSize = .zero
-            textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
             textView.autoresizingMask = [.height]
         }
     }
@@ -116,7 +115,6 @@ struct PlainTextEditor: NSViewRepresentable {
         func textDidChange(_ notification: Notification) {
             guard let textView = notification.object as? NSTextView else { return }
             parent.text = textView.string
-            parent.onTextChange(textView.string)
         }
     }
 }
